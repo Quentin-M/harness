@@ -24,10 +24,10 @@ out only when Q confirmed its summary and the pilot slices closed through the ju
 
 One watchdog, every 30 minutes: the digest. On each wake:
 1. Run the mission digest (the `mission` skill, § Digest) and refresh mission `PROGRESS.md`.
-2. Send Q one message: the bar, what closed, what is blocked on Q, anything stalled past its
-   budget. Nothing changed: one line.
-3. Answer rows blocked on you: settle it from the SPEC, or put the question to Q once, with options
-   and a recommendation. Record Q's answer in `decisions.tsv` and, when it changes a rule, run
+2. Send Q the digest exactly as the skill shapes it: progress and summary first, then one
+   section per decision with context, question, options and your recommendation.
+3. Answer rows blocked on you: settle it from the SPEC, or carry it into the digest as a decision
+   section; never ask Q piecemeal. Record Q's answer in `decisions.tsv` and, when it changes a rule, run
    `mission amend`.
 Between wakes, idle.
 

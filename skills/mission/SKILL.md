@@ -115,12 +115,33 @@ evidence the change voids. No broadcast: seats read the SPEC at their next fresh
 ## Digest
 
 Every 30 minutes, from `rig queue list --json`, the ledger, `rig proof show missions/<id> --json`
-and slice front matter. Refresh mission `PROGRESS.md`, then send Q:
+and slice front matter. Never ask a seat for status. Refresh mission `PROGRESS.md`, then send Q one
+message shaped by `styles/i-have-adhd.md`: line 1 says how many decisions wait on Q, pictures
+first, short captions. Aim for one screen plus one block per decision.
 
-    <id>  ██████░░░░ 31/52 closed   +3 since last
-    closed     #978 merged · #902 merged · #751 closed (dup of #784)
-    blocked on you   #784 FUNDS-7 sign-off (since 14:10)
-    stalled    #962 at verifier-2 for 2h10 (budget 1h)
-    resources  test-box 6/8 leased
+    2 decisions need you · <id> ██████░░░░ 31/52 closed (+3 in 30 min)
 
-Nothing changed: one line. Never ask a seat for status.
+    ✓ #978 merged    ✓ #902 merged    ✓ #751 closed: duplicate of #784
+    ◐ 14 in flight   review 5 · verify 6 · fix 3
+    ⏸ 2 blocked on you (below)
+    ⚠ #962 at verifier-2 for 2h10, budget 1h: relaunched fresh
+
+    test-box  ██████░░ 6/8 leased
+
+    <2-4 sentences: what moved, what is at risk, what happens next without Q>
+
+Then one section per decision, oldest first:
+
+    ## ⚠ D-<n> #784: <the question in one line>
+    Context    what the subject is, what happened, why it is stuck now (facts,
+               file:line or PR links, no jargon without a gloss)
+    Question   the exact decision, answerable in one reply
+    Options    A <choice> - cost, consequence      (recommended, and why)
+               B <choice> - cost, consequence
+    If no answer   what the rig does meanwhile (parked, next subject)
+    Reply      "D-<n> A" or your own wording
+
+Each decision carries everything Q needs to answer from the message alone. A decision carried
+over from an earlier digest repeats in full with its age. When Q answers, record it in
+`decisions.tsv`, unblock the row with `rig queue resolve`, and amend the SPEC when the answer
+changes a rule. Nothing changed and nothing waits on Q: one line.
