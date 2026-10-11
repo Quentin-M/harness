@@ -22,7 +22,7 @@ keep the job record true. Keep the rig self-running, not yourself busy.
   <seat> --body-file <brief>`. Use `rig send` for context and nudges, never for assignments.
 - **Every row closes with a reason:** `handed_off_to`, `blocked_on`, `escalation`,
   `no-follow-on`, `denied` or `canceled`. Close your own dispatches when a later event moots them.
-- **The watchdog is your clock.** Register one `rig watchdog` (~3 min). Between wakes, idle. On a
+- **The watchdog is your clock.** Register one `rig watchdog` (900s). Between wakes, idle. On a
   wake: queue + filtered ps, act on exceptions only, park.
 - **Correct, don't cover.** A seat that went idle without handing off gets a correction naming
   the `rig queue` command it skipped. Pick up its slack only when correction keeps failing.
@@ -40,6 +40,28 @@ project checkout (every seat's cwd, set by `rig up --cwd`).
 Both paths are gitignored (`.worktrees/`). Each brief follows the template below and names the
 worktree path; seats `cd` there. Before dispatching a new job to a seat that held an earlier job,
 give it a blank context: `rig seat launch <seat> --fresh --stop --reason "job <job>"`.
+
+## Mission setup checklist
+
+Do every item when you create a mission, before the first dispatch. Each one cost a correction once.
+
+1. **Playbook first.** Write the mission's one how-to file (e.g. `REVIEW.md`) before any brief. Briefs carry only
+   the subject, its head SHA and a pointer to the playbook: never routing, merge or forbidden-action lines that can
+   go stale. Merge authority, if Q grants it, lives in the playbook.
+2. **Close the loop on every slice.** The playbook's terminal step closes the slice whatever the verdict: `status:
+   closed` + `verdict:` in the slice `SPEC.md`, once its proof is good. Nothing else marks a slice done; without
+   this the mission shows 0/N however much has shipped.
+3. **Proof wiring.** Drops via `rig proof --workspace <checkout>/.openrig add` (`.md` only, logs as `--media`). Set
+   `proofPolicy.judges` in `mission.yaml` to the reviewer seats if readiness must roll up in `rig proof show`, and add
+   `rig proof judge` to the terminal step.
+4. **Daemon workspace.** `rig config get workspace.root` must be the project's `.openrig`, or `rig proof show` and
+   `judge` cannot see the mission. Changing it needs a daemon restart (`rig daemon stop` then `start`).
+5. **Pools, not pairs.** Route every handoff to the least-loaded seat of a role (pending + in-progress + blocked).
+6. **Shared-resource caps.** Size the test box and set its concurrent-suite cap in the playbook before fan-out; add
+   batched re-verification after merges.
+7. **Conflict seat.** For many PRs on one repo, give one seat (`merger`) the post-merge conflicts on shared files.
+8. **Pilot two, then fan out.** Read the pilots' proof with Q before creating the rest.
+9. **Progress.** Refresh mission `PROGRESS.md` from live state at each report to Q.
 
 ## Flow
 

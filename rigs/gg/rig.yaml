@@ -60,6 +60,36 @@ pods:
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-5
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-6
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-7
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-8
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: merger
+        agent_ref: "local:../../agents/engineer"
+        profile: merger
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
     edges: []
 
   - id: verify
@@ -77,17 +107,41 @@ pods:
         runtime: codex
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: verifier-3
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: verifier-4
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-1
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: claude-code
-        model: gpt-6.1-sol
+        model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-2
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: claude-code
-        model: gpt-6.1-sol
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: reviewer-3
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: reviewer-4
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
     edges: []
 
@@ -98,51 +152,161 @@ edges:
   - {kind: delegates_to, from: lead.lead, to: dev.engineer-2}
   - {kind: delegates_to, from: lead.lead, to: dev.engineer-3}
   - {kind: delegates_to, from: lead.lead, to: dev.engineer-4}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-5}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-6}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-7}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-8}
+  - {kind: delegates_to, from: lead.lead, to: dev.merger}
   - {kind: delegates_to, from: lead.lead, to: verify.verifier-1}
   - {kind: delegates_to, from: lead.lead, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.lead, to: verify.verifier-3}
+  - {kind: delegates_to, from: lead.lead, to: verify.verifier-4}
   - {kind: delegates_to, from: lead.lead, to: verify.reviewer-1}
   - {kind: delegates_to, from: lead.lead, to: verify.reviewer-2}
+  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-3}
+  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-4}
   - {kind: delegates_to, from: lead.peer, to: verify.verifier-1}
   - {kind: delegates_to, from: lead.peer, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-4}
   - {kind: delegates_to, from: lead.peer, to: verify.reviewer-1}
   - {kind: delegates_to, from: lead.peer, to: verify.reviewer-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-4}
   # engineers hand their head SHA to a verifier
   - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-1}
   - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-4}
   - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-1}
   - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-4}
   - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-1}
   - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-4}
   - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-1}
   - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-4}
+  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-4}
+  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-4}
+  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-4}
+  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-4}
+  - {kind: delegates_to, from: dev.merger, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.merger, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.merger, to: verify.verifier-3}
+  - {kind: delegates_to, from: dev.merger, to: verify.verifier-4}
   # verification reads dev output
   - {kind: can_observe, from: verify.verifier-1, to: dev.architect}
   - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-1}
   - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-2}
   - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-3}
   - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.merger}
   - {kind: can_observe, from: verify.verifier-2, to: dev.architect}
   - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-1}
   - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-2}
   - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-3}
   - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.merger}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.architect}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.verifier-3, to: dev.merger}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.architect}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.verifier-4, to: dev.merger}
   - {kind: can_observe, from: verify.reviewer-1, to: dev.architect}
   - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-1}
   - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-2}
   - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-3}
   - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.merger}
   - {kind: can_observe, from: verify.reviewer-2, to: dev.architect}
   - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-1}
   - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-2}
   - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-3}
   - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.merger}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.architect}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.reviewer-3, to: dev.merger}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.architect}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-5}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-6}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-7}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.engineer-8}
+  - {kind: can_observe, from: verify.reviewer-4, to: dev.merger}
   # escalation route
   - {kind: escalates_to, from: dev.architect, to: lead.lead}
   - {kind: escalates_to, from: dev.engineer-1, to: lead.lead}
   - {kind: escalates_to, from: dev.engineer-2, to: lead.lead}
   - {kind: escalates_to, from: dev.engineer-3, to: lead.lead}
   - {kind: escalates_to, from: dev.engineer-4, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-5, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-6, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-7, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-8, to: lead.lead}
+  - {kind: escalates_to, from: dev.merger, to: lead.lead}
   - {kind: escalates_to, from: verify.verifier-1, to: lead.lead}
   - {kind: escalates_to, from: verify.verifier-2, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-3, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-4, to: lead.lead}
   - {kind: escalates_to, from: verify.reviewer-1, to: lead.lead}
   - {kind: escalates_to, from: verify.reviewer-2, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-3, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-4, to: lead.lead}

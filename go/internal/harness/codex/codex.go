@@ -3,9 +3,14 @@ package codex
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 
@@ -61,10 +66,28 @@ func (H) Sync(ctx *harness.Ctx) error {
 	for e, g := range claude.MemoryHooks(ctx, "codex") {
 		hooks[e] = g
 	}
+	st := map[string]any{}
 	if oh, ok := old["hooks"].(map[string]any); ok {
-		if st, ok := oh["state"].(map[string]any); ok && len(st) > 0 {
-			hooks["state"] = st
+		if o, ok := oh["state"].(map[string]any); ok {
+			st = o
 		}
+	}
+	// harness installs these hooks itself; recording their trust keeps fresh codex seats off codex's
+	// startup hook-review prompt, which blocks an unattended seat
+	owned, err := ownedHooks(d, hooks)
+	if err != nil {
+		return err
+	}
+	for k, h := range owned {
+		s, _ := st[k].(map[string]any)
+		if s == nil {
+			s = map[string]any{}
+		}
+		s["trusted_hash"] = h
+		st[k] = s
+	}
+	if len(st) > 0 {
+		hooks["state"] = st
 	}
 	cfg.Hooks = hooks
 	var buf bytes.Buffer
@@ -95,4 +118,75 @@ func (H) Argv(ctx *harness.Ctx, m string, args []string) ([]string, error) {
 		argv = append(argv, "--model", ctx.Models.ResolveFlag("codex", m))
 	}
 	return append(argv, args...), nil
+}
+
+var eventKeys = map[string]string{
+	"PreToolUse": "pre_tool_use", "PermissionRequest": "permission_request", "PostToolUse": "post_tool_use",
+	"PreCompact": "pre_compact", "PostCompact": "post_compact", "SessionStart": "session_start",
+	"SessionEnd": "session_end", "UserPromptSubmit": "user_prompt_submit", "SubagentStart": "subagent_start",
+	"SubagentStop": "subagent_stop", "Stop": "stop", "Interrupt": "interrupt",
+}
+
+// ownedHooks maps codex hook-state keys to trust hashes for the memory hooks in config.toml and the
+// herdr hooks in hooks.json that run harness' own herdr script. Any other hook stays for a human to review.
+func ownedHooks(d string, memory map[string]any) (map[string]string, error) {
+	out := map[string]string{}
+	add := func(src, event string, gi, hi int, h claude.Hook) {
+		if ev, ok := eventKeys[event]; ok {
+			out[fmt.Sprintf("%s:%s:%d:%d", filepath.Join(d, src), ev, gi, hi)] = hookHash(ev, h)
+		}
+	}
+	for event, g := range memory {
+		for gi, grp := range g.([]claude.HookGroup) {
+			for hi, h := range grp.Hooks {
+				if grp.Matcher == "" {
+					add("config.toml", event, gi, hi, h)
+				}
+			}
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(d, "hooks.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return out, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var hf struct {
+		Hooks map[string][]claude.HookGroup `json:"hooks"`
+	}
+	if err := json.Unmarshal(b, &hf); err != nil {
+		return nil, fmt.Errorf("codex/hooks.json: %w", err)
+	}
+	herdr := "bash '" + filepath.Join(d, "herdr-agent-state.sh") + "' "
+	for event, groups := range hf.Hooks {
+		for gi, grp := range groups {
+			for hi, h := range grp.Hooks {
+				if grp.Matcher == "" && h.Type == "command" && strings.HasPrefix(h.Command, herdr) {
+					add("hooks.json", event, gi, hi, h)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// hookHash reproduces codex's trust identity (hooks discovery.rs hook_hash): sha256 of key-sorted JSON
+// for the event label plus the normalized handler, timeouts clamped as codex clamps them.
+func hookHash(event string, h claude.Hook) string {
+	t := h.Timeout
+	switch {
+	case event == "interrupt" || event == "session_end":
+		t = min(max(t, 1), 3)
+		if h.Timeout == 0 {
+			t = 1
+		}
+	case t == 0:
+		t = 600
+	}
+	id := map[string]any{"event_name": event, "hooks": []map[string]any{
+		{"type": h.Type, "command": h.Command, "timeout": t, "async": h.Async},
+	}}
+	b, _ := json.Marshal(id) // map keys marshal sorted
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
