@@ -45,11 +45,12 @@ The rules:
   diagram costs them two seconds. A paragraph they skipped costs the answer.
 - Each element says something new. The picture does not restate line 1, and
   the caption does not restate the picture.
-- Pictures live in fenced code blocks, within 80 columns, plain monospace,
-  readable in light and dark terminals. Tables use markdown.
-- When the picture outgrows a terminal (a real chart, a large architecture
-  map, something they will come back to), publish an Artifact and give the link
-  in one line.
+- Draw every picture as ASCII or Unicode box-drawing text in a fenced code
+  block, within 80 columns, plain monospace, readable in light and dark
+  terminals. Tables use markdown. Diagrams, charts, mockups and maps are all
+  drawn this way, inline in the reply.
+- When a picture outgrows 80 columns, split it into smaller diagrams, one per
+  part, each with its own caption.
 
 ### Pick the picture by the shape of the content
 
