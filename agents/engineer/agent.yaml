@@ -9,6 +9,13 @@ defaults:
 
 profiles:
   default: {}
+  merger:
+    summary: Resolves merge conflicts on mission PR branches after each merge to main.
+    startup:
+      files:
+        - path: merger.md
+          delivery_hint: send_text
+          required: true
 
 startup:
   files:
