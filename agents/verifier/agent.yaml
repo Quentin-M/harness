@@ -1,6 +1,6 @@
 name: verifier
 version: "1.0"
-description: Independent verification of one head SHA. Runs every gate live, captures proof, writes the ledger verdict. Never fixes.
+description: Machine evidence for one head SHA. Runs every gate the mission SPEC lists, captures and reads back media, writes the ledger row. Never fixes, never judges.
 
 defaults:
   runtime: claude-code
@@ -14,6 +14,6 @@ startup:
   files:
     - path: role.md
       orientation: role
-      delivery_hint: send_text
+      delivery_hint: guidance_merge
       required: true
   actions: []

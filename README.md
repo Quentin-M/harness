@@ -38,16 +38,22 @@ rig ps
 ## Pod
 
 ```
-lead    lead (opus) ⇄ peer (gpt-6.1-sol)
-          │ queue rows, one worktree per job, fresh seats per job
-dev     architect · engineer-1…N          pool, opus-5-5[1m]
-          │ queue handoff at a head SHA
-verify  verifier-1…N · reviewer-1…N      pools, gpt-6.1-sol, observe dev ─▶ PR.md
+lead    lead (opus) ⇄ Q            missions via /mission, 30-min digest
+        peer (gpt-6.1-sol)         seat health
+dev     architect · engineer-1…N   opus-5-5[1m]
+verify  reviewer-1…N               gpt-6.1-sol, code review only
+        verifier-1…N               opus-5-5[1m], machine evidence + media
+        judge                      opus-5-5[1m], accepts proof, closes slices
+
+engineer ─head─▶ verifier ─▶ reviewer ─approve─▶ judge ─accept─▶ closed
+    ▲                │ failed       │ changes        │ reject ─▶ owning seat
+    └────────────────┴──────────────┘
 ```
 
-Roles are pools: the lead hands each job to the least-loaded seat of a role and names the
-downstream seats in the brief. Grow a pool by adding members to `rigs/gg/rig.yaml` and their edges
-(`delegates_to` from `lead.lead`, `escalates_to` back to it, `can_observe` dev for checkers), then
+Seats hand off to each other through the queue and relaunch blank after each row
+(`harness fresh`). The lead only hears decisions. Heavy runs on a shared resource take a
+`harness lease`. The mission SPEC holds every rule; `rigs/gg/CULTURE.md` binds every seat.
+Grow a pool by adding members and their edges to `rigs/gg/rig.yaml`, then
 `rig down gg && rig up rigs/gg/rig.yaml`.
 
 The builder never verifies its own work, and a different model family checks it. Seats run

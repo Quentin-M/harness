@@ -1,6 +1,6 @@
 name: engineer
 version: "1.0"
-description: Builds an approved design. Tests first, code inside budget, then hands the branch to the verifier. Never verifies own work.
+description: Builds designs, fixes findings and resolves merge conflicts. Tests first, code inside budget, then hands the head SHA to a verifier. Never verifies own work.
 
 defaults:
   runtime: claude-code
@@ -9,18 +9,11 @@ defaults:
 
 profiles:
   default: {}
-  merger:
-    summary: Resolves merge conflicts on mission PR branches after each merge to main.
-    startup:
-      files:
-        - path: merger.md
-          delivery_hint: send_text
-          required: true
 
 startup:
   files:
     - path: role.md
       orientation: role
-      delivery_hint: send_text
+      delivery_hint: guidance_merge
       required: true
   actions: []

@@ -37,7 +37,9 @@ func (H) Env(ctx *harness.Ctx) error {
 	// The daemon's codex activity hooks land after harness' memory hooks but record trust for group 0,
 	// overwriting the memory hooks' trust; harness sync rewrites config.toml without its block anyway.
 	ctx.Env["OPENRIG_RUNTIME_CODEX_HOOKS_ENABLED"] = "false"
-	ctx.Env["PATH"] = filepath.Join(dir(ctx.State), "npm/node_modules/.bin") + string(os.PathListSeparator) + ctx.Env["PATH"]
+	// seats reach rig itself and `harness lease` (the launcher binary main.sh builds into state/bin)
+	ctx.Env["PATH"] = filepath.Join(dir(ctx.State), "npm/node_modules/.bin") + string(os.PathListSeparator) +
+		filepath.Join(ctx.State, "bin") + string(os.PathListSeparator) + ctx.Env["PATH"]
 	return nil
 }
 

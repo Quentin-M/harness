@@ -1,9 +1,9 @@
 name: reviewer
 version: "1.0"
-description: Reviews designs on the lead request and verified diffs for rules, KISS, scope and leaks. Never codes.
+description: Code review. Reads designs and diffs against the mission SPEC and every rule file, files findings with file:line. Never runs tests, never codes.
 
 defaults:
-  runtime: claude-code
+  runtime: codex
   lifecycle:
     restore_policy: relaunch_fresh
 
@@ -14,6 +14,6 @@ startup:
   files:
     - path: role.md
       orientation: role
-      delivery_hint: send_text
+      delivery_hint: guidance_merge
       required: true
   actions: []

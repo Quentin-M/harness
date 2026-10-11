@@ -3,6 +3,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
@@ -649,4 +651,82 @@ func TestEveryLaunchInstallsTheMemoryHook(t *testing.T) {
 	if _, err := os.Stat(f.p("memory")); err == nil {
 		t.Fatal("opencode runs vanilla: no memory dir")
 	}
+}
+
+func TestLeaseCapsHeavyRunsAcrossProcesses(t *testing.T) {
+	f := newFixture(t)
+	exit := func(args ...string) int {
+		cmd := exec.Command(harnessBin, append([]string{"lease"}, args...)...)
+		for k, v := range f.env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		if err := cmd.Run(); err != nil {
+			var ee *exec.ExitError
+			if !errors.As(err, &ee) {
+				t.Fatal(err)
+			}
+			return ee.ExitCode()
+		}
+		return 0
+	}
+	codes := make(chan int, 12)
+	for i := range 12 {
+		go func() { codes <- exit("acquire", "box", "2", fmt.Sprintf("seat-%d", i)) }()
+	}
+	won := 0
+	for range 12 {
+		switch c := <-codes; c {
+		case 0:
+			won++
+		case 75:
+		default:
+			t.Fatalf("acquire exit %d", c)
+		}
+	}
+	eq(t, won, 2, "processes holding a cap-2 lease")
+	lines := strings.Split(strings.TrimSpace(f.run("lease", "list", "box")), "\n")
+	eq(t, len(lines), 2, "listed leases")
+	holder := strings.Split(lines[0], "\t")[0]
+	eq(t, exit("acquire", "box", "2", "late"), 75, "full exits 75")
+	eq(t, exit("release", "box", holder), 0, "release")
+	eq(t, exit("acquire", "box", "2", "late"), 0, "acquire after release")
+	eq(t, exit("release", "box", "nobody"), 1, "release unheld")
+	if !exists(f.p("rig/leases/box.json")) {
+		t.Error("leases not under the rig state dir")
+	}
+}
+
+func TestFreshRelaunchesTheCallingSeatDetached(t *testing.T) {
+	f := newFixture(t)
+	log := filepath.Join(f.tmp, "rig.log")
+	bin := filepath.Join(f.tmp, "fakerig")
+	write(t, filepath.Join(bin, "rig"), "#!/bin/sh\necho \"$@\" >> "+log+"\n")
+	must(t, os.Chmod(filepath.Join(bin, "rig"), 0o755))
+	start := time.Now()
+	f.runEnv(map[string]string{"PATH": bin + ":" + f.env["PATH"], "OPENRIG_SESSION_NAME": "verify-reviewer-1@gg",
+		"HARNESS_FRESH_DELAY": "300ms"}, "fresh")
+	if time.Since(start) > 250*time.Millisecond {
+		t.Error("fresh blocked on the relaunch")
+	}
+	if exists(log) {
+		t.Fatal("relaunch ran before the delay")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !exists(log) && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	eq(t, strings.TrimSpace(read(t, log)), "seat launch verify-reviewer-1@gg --fresh --stop --reason fresh context for the next row", "rig argv")
+}
+
+func TestFreshOutsideASeatFails(t *testing.T) {
+	f := newFixture(t)
+	cmd := exec.Command(harnessBin, "fresh")
+	for k, v := range f.env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("fresh without OPENRIG_SESSION_NAME succeeded")
+	}
+	contains(t, string(out), "OPENRIG_SESSION_NAME", "error names the missing seat")
 }
