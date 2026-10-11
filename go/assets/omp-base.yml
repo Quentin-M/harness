@@ -1,0 +1,65 @@
+symbolPreset: nerd
+theme:
+  dark: dark-catppuccin
+setupVersion: 2
+defaultThinkingLevel: auto
+composer:
+  shape: field
+compaction:
+  experimentalContextManagement: false
+  methodOrder:
+  - snapcompact
+  - remote
+  - handoff
+  - soft
+  - shake
+  idleEnabled: true
+  idleThresholdTokens: 100000
+  thresholdPercent: 70
+hideThinkingBlock: true
+personality: pragmatic
+advisor:
+  enabled: true
+  syncBacklog: 'off'
+  immuneTurns: 5
+  maxNotesPerUpdate: 1
+prewalk:
+  enabled: false
+steeringMode: all
+followUpMode: all
+interruptMode: immediate
+startup:
+  quiet: true
+power:
+  sleepPrevention: 'off'
+extendedContext: true
+autolearn:
+  enabled: false
+  autoContinue: true
+bash:
+  allowCompoundCommands: true
+astGrep:
+  enabled: true
+computer:
+  enabled: true
+checkpoint:
+  enabled: true
+github:
+  enabled: true
+security:
+  enabled: false
+todo:
+  remindersMax: 5
+plan:
+  autosave: true
+task:
+  eager: preferred
+  enableLsp: true
+  isolation:
+    enabled: false
+dev:
+  autoqaConsent: granted
+read:
+  renderMarkdown: true
+  summarize:
+    prose: true

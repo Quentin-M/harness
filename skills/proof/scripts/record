@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# record <url> <out.webm> [--viewport WxH] [--script steps.js]
+#   Video of a scripted browser session (Playwright recordVideo, webm).
+#   --viewport  window and video size, default 1280x800
+#   --script    CommonJS module: module.exports = async (page) => { ... }
+#               default session: load, scroll down, scroll back
+# Models read images, not video: run `frames` on the result and read the PNGs.
+
+source "$(dirname "$0")/lib.sh"
+vp=1280x800 steps="" pos=()
+while (($#)); do
+  case $1 in
+    -h|--help) usage ;;
+    --viewport) vp=${2:?}; shift ;;
+    --script) steps=$(abspath "${2:?}"); shift ;;
+    *) pos+=("$1") ;;
+  esac
+  shift
+done
+((${#pos[@]} == 2)) || usage 1
+pw record "${pos[0]}" "$(abspath "${pos[1]}")" "$vp" $steps

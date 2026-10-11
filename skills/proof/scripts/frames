@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# frames <video> <outdir> [--every Ns] [--width PX]
+#   Extract PNG frames with ffmpeg so a model can read a video (models read images, not video).
+#   --every  one frame per N seconds, default 1s (also accepts 0.5s, 2s, ...)
+#   --width  scale frames to this width, default 1024 (keeps image tokens low)
+# Prints the frame paths. Read the first, a middle and the last frame at least.
+
+source "$(dirname "$0")/lib.sh"
+every=1 width=1024 pos=()
+while (($#)); do
+  case $1 in
+    -h|--help) usage ;;
+    --every) every=${2:?}; every=${every%s}; shift ;;
+    --width) width=${2:?}; shift ;;
+    *) pos+=("$1") ;;
+  esac
+  shift
+done
+((${#pos[@]} == 2)) || usage 1
+need ffmpeg "brew install ffmpeg"
+[[ -f ${pos[0]} ]] || die "no such video: ${pos[0]}"
+mkdir -p "${pos[1]}"
+ffmpeg -hide_banner -loglevel error -y -i "${pos[0]}" \
+  -vf "fps=1/$every,scale=$width:-2" "${pos[1]}/frame-%04d.png"
+ls "${pos[1]}"/frame-*.png

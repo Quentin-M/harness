@@ -1,0 +1,19 @@
+name: verifier
+version: "1.0"
+description: Independent verification of one head SHA. Runs every gate live, captures proof, writes the ledger verdict. Never fixes.
+
+defaults:
+  runtime: claude-code
+  lifecycle:
+    restore_policy: relaunch_fresh
+
+profiles:
+  default: {}
+
+startup:
+  files:
+    - path: role.md
+      orientation: role
+      delivery_hint: send_text
+      required: true
+  actions: []

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# diagram <in.mmd|in.d2|in.dot> <out.svg|out.png>
+#   Render a diagram for inline display or a PR attachment.
+#     .mmd  mermaid via pinned @mermaid-js/mermaid-cli (reuses the Playwright Chromium)
+#     .d2   d2 (brew install d2); png goes svg -> Chromium screenshot
+#     .dot  graphviz (brew install graphviz)
+# Read a png output back to check labels and layout before attaching it.
+
+source "$(dirname "$0")/lib.sh"
+[[ ${1:-} == -h || ${1:-} == --help ]] && usage
+(($# == 2)) || usage 1
+in=$1 out=$(abspath "$2") fmt=${2##*.}
+[[ -f $in ]] || die "no such file: $in"
+[[ $fmt == svg || $fmt == png ]] || die "output must be .svg or .png"
+
+case $in in
+  *.mmd)
+    pw_setup
+    cfg=$STATE/mermaid/puppeteer.json
+    mkdir -p "${cfg%/*}"
+    node -e "const {chromium}=require('playwright');console.log(JSON.stringify({executablePath:chromium.executablePath(),args:['--no-sandbox']}))" >"$cfg"
+    scale=(); [[ $fmt == png ]] && scale=(-s 2)
+    npx -y "@mermaid-js/mermaid-cli@$MMDC_VERSION" -q -p "$cfg" -i "$in" -o "$out" -b white "${scale[@]}" >&2
+    ;;
+  *.d2)
+    need d2 "brew install d2"
+    if [[ $fmt == svg ]]; then
+      d2 --pad 20 "$in" "$out" >&2
+    else
+      tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+      d2 --pad 20 "$in" "$tmp/d.svg" >&2
+      pw svg2png "$tmp/d.svg" "$out" >/dev/null
+    fi
+    ;;
+  *.dot|*.gv)
+    need dot "brew install graphviz"
+    dpi=(); [[ $fmt == png ]] && dpi=(-Gdpi=144)
+    dot -T"$fmt" "${dpi[@]}" "$in" -o "$out"
+    ;;
+  *) die "unknown input type: $in (want .mmd, .d2 or .dot)" ;;
+esac
+echo "$out"

@@ -1,0 +1,19 @@
+name: engineer
+version: "1.0"
+description: Builds an approved design. Tests first, code inside budget, then hands the branch to the verifier. Never verifies own work.
+
+defaults:
+  runtime: claude-code
+  lifecycle:
+    restore_policy: relaunch_fresh
+
+profiles:
+  default: {}
+
+startup:
+  files:
+    - path: role.md
+      orientation: role
+      delivery_hint: send_text
+      required: true
+  actions: []

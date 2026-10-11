@@ -1,0 +1,29 @@
+# Model catalog and roles. Agents and skills name roles only; model ids live here.
+# The gateway URL and key command come from Claude Code managed settings (env overrides win).
+#
+# role      used by
+# default   main session
+# review    review seats, other family than default
+# fast      omp smol, cheap subagents
+# vision    omp vision/commit
+# tiny      omp tiny/memory
+provider: bitmex
+api: openai
+disable_strict_tools: true
+
+models:
+  gpt-5.6-terra: {name: GPT-5.6 Terra via LiteLLM, context: 922000, max_tokens: 128000}
+  gpt-5.6-luna:  {name: GPT-5.6 Luna via LiteLLM, context: 922000, max_tokens: 128000}
+  gpt-6.1-sol:   {name: GPT-6.1 Sol via LiteLLM, context: 1050000, max_tokens: 131072}
+  claude-opus-5-5:      {name: Opus 5.5 (1M) via LiteLLM, api: anthropic, context: 1000000, max_tokens: 128000}
+  claude-sonnet-5-5:    {name: Sonnet 5.5 (1M) via LiteLLM, api: anthropic, context: 1000000, max_tokens: 128000}
+
+roles:
+  default: claude-opus-5-5
+  review: gpt-6.1-sol
+  fast: claude-sonnet-5-5
+  vision: gpt-5.6-terra
+  tiny: gpt-5.6-luna
+
+overrides:
+  codex: {default: gpt-6.1-sol}

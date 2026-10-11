@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# term <file.tape | "command"> <out.gif|out.mp4|out.webm> [--size WxH] [--wait Ns]
+#   Terminal recording with vhs (charmbracelet). A .tape file runs as is (its Output lines are
+#   replaced by <out>); anything else is typed as one command into a fresh shell.
+#   --size  terminal pixel size, default 1200x600
+#   --wait  seconds to keep recording after the command, default 3s
+# Run `frames` on mp4/webm output (or read a gif's frames) to inspect the result.
+
+source "$(dirname "$0")/lib.sh"
+size=1200x600 wait=3 pos=()
+while (($#)); do
+  case $1 in
+    -h|--help) usage ;;
+    --size) size=${2:?}; shift ;;
+    --wait) wait=${2:?}; wait=${wait%s}; shift ;;
+    *) pos+=("$1") ;;
+  esac
+  shift
+done
+((${#pos[@]} == 2)) || usage 1
+need vhs "brew install vhs"
+in=${pos[0]} out=$(abspath "${pos[1]}")
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+tape=$tmp/run.tape
+if [[ $in == *.tape && -f $in ]]; then
+  { echo "Output \"$out\""; grep -v '^Output ' "$in"; } >"$tape"
+else
+  # vhs strings have no escapes: quote with a delimiter the command does not contain.
+  q=""
+  for d in '"' "'" '`'; do [[ $in != *"$d"* ]] && { q=$d; break; }; done
+  [[ -n $q ]] || die 'command uses all of " '"'"' and `; write a .tape file instead'
+  cmd=$q$in$q
+  cat >"$tape" <<TAPE
+Output "$out"
+Set Shell "bash"
+Set Width ${size%x*}
+Set Height ${size#*x}
+Set FontSize 18
+Set TypingSpeed 20ms
+Sleep 500ms
+Type $cmd
+Enter
+Sleep ${wait}s
+TAPE
+fi
+vhs -q "$tape" >&2
+echo "$out"
