@@ -1,7 +1,7 @@
 # Writing Style
 
 Always-on floor for any text a human reads: chat, code comments, commit messages, docs. The
-**i-have-adhd** style shapes structure on top of it.
+**Communication** rule shapes replies to Q on top of it.
 
 - **No em-dash.** Use a spaced dash ` - `, a comma, or a full stop. Tilde `~` for soft greetings and
   sign-offs; `…` for a thought trailing off.
