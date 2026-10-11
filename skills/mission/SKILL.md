@@ -9,11 +9,44 @@ A mission fails at setup or not at all. Every requirement Q gives becomes a proo
 accept or reject, and Q confirms the wording before any slice exists.
 
 ```
-1 intake ─▶ 2 draft ─▶ 3 summary ─▶ Q ─yes─▶ 4 lock ─▶ 5 pilot ─▶ Q ─yes─▶ 6 fan-out
-                ▲                    │edits                         │edits
-                └────────────────────┴──────────────────────────────┘
-amend:  edit SPEC ─▶ summary of the diff ─▶ Q ─yes─▶ regenerate open slices ─▶ bump version
-digest: every 30 min, generated from the queue, the ledger and the proof
+╭───────────╮
+│ 1 intake  │
+╰─────┬─────╯
+      ▼
+╭───────────╮
+│ 2 draft   │ ◀────────────╮
+╰─────┬─────╯              │
+      ▼                    │
+╭───────────╮              │
+│ 3 summary │              │
+╰─────┬─────╯              │
+      ▼                    │
+      Q ────── edits ──────┤
+      │ yes                │
+      ▼                    │
+╭───────────╮              │
+│ 4 lock    │              │
+╰─────┬─────╯              │
+      ▼                    │
+╭───────────╮              │
+│ 5 pilot   │              │
+╰─────┬─────╯              │
+      ▼                    │
+      Q ────── edits ──────╯
+      │ yes
+      ▼
+╭───────────╮
+│ 6 fan-out │
+╰───────────╯
+```
+
+```
+amend    edit SPEC ─▶ diff summary ─▶ Q
+                                      │ yes
+                                      ▼
+                       regenerate open slices ─▶ bump version
+
+digest   every 30 min, generated from the queue, the ledger and the proof
 ```
 
 Usage: `/mission <what Q wants>`, `/mission amend <change>`, `/mission digest`.
@@ -116,7 +149,7 @@ evidence the change voids. No broadcast: seats read the SPEC at their next fresh
 
 Every 30 minutes, from `rig queue list --json`, the ledger, `rig proof show missions/<id> --json`
 and slice front matter. Never ask a seat for status. Refresh mission `PROGRESS.md`, then send Q one
-message shaped by `styles/i-have-adhd.md`: line 1 says how many decisions wait on Q, pictures
+message shaped by `rules/communication.md`: line 1 says how many decisions wait on Q, pictures
 first, short captions. Aim for one screen plus one block per decision.
 
     2 decisions need you · <id> ██████░░░░ 31/52 closed (+3 in 30 min)

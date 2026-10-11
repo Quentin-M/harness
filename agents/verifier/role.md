@@ -26,6 +26,7 @@ playbook, the reviewer's drop when one exists. Run in a detached checkout:
     ci        each required check green at this head, mergeable, no unresolved thread
     media     screenshots, video, terminal recordings captured and read back
     leaks     gitleaks or `git diff | grep` over diff, commits, PR body, proof media
+    diagrams  `harness diagrams` over every changed .md and the PR body
 
 **Work:**
 1. Before a run the mission SPEC marks heavy, take a lease on the resource it names (CULTURE
