@@ -46,6 +46,10 @@ done
 mkdir -p "$SKILLS/poteto-mode/references/agents"
 rsync -a --delete "$SRC/agents/" "$SKILLS/poteto-mode/references/agents/"
 cp "$SRC/LICENSE" "$SKILLS/LICENSE-pstack"
+# local edits to vendored skills survive updates as patches
+for p in "$SKILLS"/pstack.patches/*.patch; do
+  [[ -e $p ]] && git -C "$SKILLS/.." apply "$p"
+done
 
 {
   sed '/^```yaml$/q' "$SHEET"
