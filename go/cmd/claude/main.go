@@ -2,6 +2,8 @@
 //
 //	claude [--claude|--omp|--codex|--rig|--opencode|--oc] [--model ROLE_OR_ID] [harness args...]
 //	claude sync | claude doctor
+//	claude fresh            (inside a rig seat: relaunch this seat with a blank context)
+//	claude lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>
 //
 // Default harness: $HARNESS_DEFAULT, else claude. opencode runs vanilla, no generated config.
 package main
@@ -12,10 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Quentin-M/harness/internal/harness"
 	_ "github.com/Quentin-M/harness/internal/harness/claude"
@@ -24,6 +29,7 @@ import (
 	_ "github.com/Quentin-M/harness/internal/harness/opencode"
 	_ "github.com/Quentin-M/harness/internal/harness/rig"
 	"github.com/Quentin-M/harness/internal/layer"
+	"github.com/Quentin-M/harness/internal/lease"
 	"github.com/Quentin-M/harness/internal/memory"
 	"github.com/Quentin-M/harness/internal/model"
 	"github.com/Quentin-M/harness/internal/sys"
@@ -44,6 +50,9 @@ func main() {
 			msg = "harness: " + msg
 		}
 		fmt.Fprintln(os.Stderr, msg)
+		if errors.Is(err, errFull) {
+			os.Exit(75)
+		}
 		os.Exit(1)
 	}
 }
@@ -51,7 +60,7 @@ func main() {
 type args struct {
 	harness, model string
 	rest           []string
-	cmd            string // sync, doctor or "" for a launch
+	cmd            string // sync, doctor, lease, fresh or "" for a launch
 }
 
 func parse(argv []string, env sys.Env) args {
@@ -81,7 +90,7 @@ func parse(argv []string, env sys.Env) args {
 		}
 	}
 	a.rest = argv[i:]
-	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor"}, a.rest[0]) {
+	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh"}, a.rest[0]) {
 		a.cmd = a.rest[0]
 	}
 	return a
@@ -90,6 +99,12 @@ func parse(argv []string, env sys.Env) args {
 func run(argv []string) error {
 	env := sys.OSEnv()
 	a := parse(argv, env)
+	switch a.cmd {
+	case "lease":
+		return leaseCmd(env, a.rest[1:])
+	case "fresh":
+		return fresh(env)
+	}
 	root, err := harnessRoot(env)
 	if err != nil {
 		return err
@@ -146,6 +161,85 @@ func launch(ctx *harness.Ctx, a args) error {
 		return nil
 	}
 	return syscall.Exec(argv[0], argv, ctx.Env.Environ())
+}
+
+// errFull exits 75 (EX_TEMPFAIL) so a seat can tell "try the light run" from a real error.
+var errFull = errors.New("full")
+
+// leaseCmd caps concurrent heavy runs on a shared resource; leases live under $OPENRIG_HOME.
+func leaseCmd(env sys.Env, argv []string) error {
+	ttl := 4 * time.Hour
+	if v := env.Get("HARNESS_LEASE_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("HARNESS_LEASE_TTL: %w", err)
+		}
+		ttl = d
+	}
+	dir := env.Get("OPENRIG_HOME")
+	if dir == "" {
+		dir = filepath.Join(stateDir(env), "rig")
+	}
+	s := &lease.Store{Dir: filepath.Join(dir, "leases"), TTL: ttl, Now: time.Now}
+	usage := errors.New("usage: lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>")
+	if len(argv) == 0 {
+		return usage
+	}
+	switch {
+	case argv[0] == "acquire" && len(argv) == 4:
+		n, err := strconv.Atoi(argv[2])
+		if err != nil {
+			return fmt.Errorf("lease cap %q: %w", argv[2], err)
+		}
+		ok, err := s.Acquire(argv[1], n, argv[3])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("lease %s: all %d held: %w", argv[1], n, errFull)
+		}
+		return nil
+	case argv[0] == "release" && len(argv) == 3:
+		return s.Release(argv[1], argv[2])
+	case argv[0] == "list" && len(argv) == 2:
+		ls, err := s.List(argv[1])
+		for _, l := range ls {
+			fmt.Printf("%s\t%s\n", l.Holder, l.Since.Format(time.RFC3339))
+		}
+		return err
+	}
+	return usage
+}
+
+// fresh relaunches the calling seat with a blank context. `rig seat launch --stop` kills the seat's
+// own pane, so the relaunch runs in a detached session after a delay that lets this turn end.
+func fresh(env sys.Env) error {
+	seat := env.Get("OPENRIG_SESSION_NAME")
+	if seat == "" {
+		return errors.New("fresh: OPENRIG_SESSION_NAME unset; run it inside a rig seat")
+	}
+	delay := 5 * time.Second
+	if v := env.Get("HARNESS_FRESH_DELAY"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("HARNESS_FRESH_DELAY: %w", err)
+		}
+		delay = d
+	}
+	rig := sys.New(env).Which("rig")
+	if rig == "" {
+		return errors.New("fresh: rig not on PATH")
+	}
+	script := fmt.Sprintf("sleep %.3f; exec %q seat launch %q --fresh --stop --reason 'fresh context for the next row'",
+		delay.Seconds(), rig, seat)
+	cmd := exec.Command("/bin/sh", "-c", script)
+	cmd.Env = env.Environ()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("fresh %s: %w", seat, err)
+	}
+	fmt.Printf("%s relaunches fresh in %s; end your turn now\n", seat, delay)
+	return cmd.Process.Release()
 }
 
 // dryRun is {"argv": [...], "env": {key: value or null}}.

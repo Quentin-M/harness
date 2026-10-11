@@ -67,7 +67,7 @@ func TestEnvSelectsHarnessConfigForSeats(t *testing.T) {
 		"CODEX_HOME":                          filepath.Join(ctx.State, "codex"),
 		"ANTHROPIC_BASE_URL":                  "https://gw.example",
 		"HOME":                                ctx.Sys.Home,
-		"PATH":                                filepath.Join(ctx.State, "rig/npm/node_modules/.bin") + ":" + path,
+		"PATH":                                filepath.Join(ctx.State, "rig/npm/node_modules/.bin") + ":" + filepath.Join(ctx.State, "bin") + ":" + path,
 	}
 	for k, v := range want {
 		if ctx.Env[k] != v {

@@ -14,6 +14,6 @@ startup:
   files:
     - path: role.md
       orientation: role
-      delivery_hint: send_text
+      delivery_hint: guidance_merge
       required: true
   actions: []

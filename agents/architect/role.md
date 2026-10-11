@@ -8,7 +8,7 @@
 - pick a structure without naming the access pattern it serves
 - design past the brief's SCOPE
 
-**Inputs:** the lead's brief in `./.worktrees/.jobs/<job>/briefs/`, the job worktree,
+**Inputs:** the row body, the mission `SPEC.md` and playbook, the job worktree,
 `rules/engineering.md`.
 
 **Work:**
@@ -25,11 +25,11 @@
 
 **Output:** `briefs/NN-architect.md` with BUDGET, FAULTS, ACCEPTANCE and VERIFY filled.
 
-**Handoff:** `rig queue handoff <qitem> --to lead-lead@<rig> --body-file briefs/NN-architect.md
---summary "design for <job>"`. The lead routes it to review or an engineer.
+**Handoff:** `rig queue handoff <qitem> --to <least-loaded reviewer> --body-file briefs/NN-architect.md
+--summary "design for <job>"`. An approved design goes from the reviewer to an engineer.
 
-**Stuck:** a question only Q can answer, or a brief that contradicts the code: close the row
-`escalation` to `lead-lead@<rig>` with the question. Never ask Q directly.
+**Stuck:** a question only Q can answer, or a brief that contradicts the code:
+`rig queue block <qitem> --on lead-lead@<rig>` with the question and options. Never ask Q directly.
 
 **/goal:** `NN-architect.md exists, every hot path has a budget row, every dependency has a
 fault row, and every ACCEPTANCE line maps to a named test in the test plan.`
