@@ -86,10 +86,18 @@ projects.
 Never run `setup-pstack`. Models are not configured per user here.
 
 ```
-models.yaml (+ layer models.yaml)      skills/pstack-sheet.yaml
-   roles: default, review, ...   ──┐      "feature, refactoring": default
-                                   ├──▶  harness launcher ──▶ "## pstack models" in the
-   profile: sub | <layer profiles> ┘      arena runners: [default, review]   generated instructions
+╭─────────────────────────────────╮   ╭──────────────────────────────────╮
+│ models.yaml (+ layer)           │   │ skills/pstack-sheet.yaml         │
+│ roles: default, review, ...     │   │ "feature, refactoring": default  │
+│ profile: sub | <layer profiles> │   │ arena runners: [default, review] │
+╰────────────────┬────────────────╯   ╰────────────────┬─────────────────╯
+                 ╰──────────────────┬──────────────────╯
+                                    ▼
+                          ╭──────────────────╮
+                          │ harness launcher │
+                          ╰─────────┬────────╯
+                                    ▼
+            "## pstack models" in the generated instructions
 ```
 
 - Read the model for a pstack role from the `## pstack models` section of your instructions.

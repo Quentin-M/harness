@@ -4,6 +4,7 @@
 //	claude sync | claude doctor
 //	claude fresh            (inside a rig seat: relaunch this seat with a blank context)
 //	claude lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>
+//	claude diagrams <file.md>...   (lint box-drawing diagrams; exit 1 on any issue)
 //
 // Default harness: $HARNESS_DEFAULT, else claude. opencode runs vanilla, no generated config.
 package main
@@ -22,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Quentin-M/harness/internal/diagram"
 	"github.com/Quentin-M/harness/internal/harness"
 	_ "github.com/Quentin-M/harness/internal/harness/claude"
 	_ "github.com/Quentin-M/harness/internal/harness/codex"
@@ -60,7 +62,7 @@ func main() {
 type args struct {
 	harness, model string
 	rest           []string
-	cmd            string // sync, doctor, lease, fresh or "" for a launch
+	cmd            string // sync, doctor, lease, fresh, diagrams or "" for a launch
 }
 
 func parse(argv []string, env sys.Env) args {
@@ -90,7 +92,7 @@ func parse(argv []string, env sys.Env) args {
 		}
 	}
 	a.rest = argv[i:]
-	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh"}, a.rest[0]) {
+	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh", "diagrams"}, a.rest[0]) {
 		a.cmd = a.rest[0]
 	}
 	return a
@@ -104,6 +106,8 @@ func run(argv []string) error {
 		return leaseCmd(env, a.rest[1:])
 	case "fresh":
 		return fresh(env)
+	case "diagrams":
+		return diagrams(a.rest[1:])
 	}
 	root, err := harnessRoot(env)
 	if err != nil {
@@ -161,6 +165,28 @@ func launch(ctx *harness.Ctx, a args) error {
 		return nil
 	}
 	return syscall.Exec(argv[0], argv, ctx.Env.Environ())
+}
+
+// diagrams lints every diagram in the named markdown files and fails when any has an issue.
+func diagrams(files []string) error {
+	if len(files) == 0 {
+		return errors.New("usage: diagrams <file.md>...")
+	}
+	n := 0
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return fmt.Errorf("diagrams: %w", err)
+		}
+		for _, i := range diagram.Lint(string(b)) {
+			fmt.Printf("%s:%s\n", f, i)
+			n++
+		}
+	}
+	if n > 0 {
+		return fmt.Errorf("diagrams: %d issues", n)
+	}
+	return nil
 }
 
 // errFull exits 75 (EX_TEMPFAIL) so a seat can tell "try the light run" from a real error.

@@ -13,7 +13,7 @@ once end to end before handing it over. Shape reference: poteto/verification-ski
 ```
 .agents/skills/verify-<app>/
 ├── SKILL.md            launch, doctor, drive, evidence, faults, perf, cleanup
-├── control-<app>       optional driver script, executable, `--help` lists every command
+├── control-<app>       optional driver script; `--help` lists every command
 └── features/
     ├── README.md       index, baseline preconditions, sweep order
     └── <area>.md       one per user-facing area, from features/_area.md

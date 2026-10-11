@@ -9,7 +9,7 @@ harness/
 ├── AGENTS.md            persona and layer precedence
 ├── rules/ styles/       always-on rules, reply style
 ├── skills/              ours + pstack (PSTACK.md pins upstream), /ketchup
-├── agents/<role>/       OpenRig agent.yaml + role.md, one per role, shared by projects
+├── agents/<role>/       agent.yaml + role.md per role, shared by projects
 ├── rigs/<project>/      rig.yaml (every pod) · CULTURE.md
 ├── openrig.yaml         OpenRig project catalog
 └── go/                  launcher: `claude` CLI + models.yaml

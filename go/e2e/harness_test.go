@@ -730,3 +730,21 @@ func TestFreshOutsideASeatFails(t *testing.T) {
 	}
 	contains(t, string(out), "OPENRIG_SESSION_NAME", "error names the missing seat")
 }
+
+func TestDiagramsLintsFilesAndFailsOnIssues(t *testing.T) {
+	f := newFixture(t)
+	good, bad := filepath.Join(f.tmp, "good.md"), filepath.Join(f.tmp, "bad.md")
+	write(t, good, "# ok\n\n    ╭────╮\n    │ db │\n    ╰─┬──╯\n      ▼\n")
+	write(t, bad, "# off by one\n\n    ╭────╮\n    ╰─┬──╯\n       │\n")
+	eq(t, f.run("diagrams", good), "", "clean file prints nothing")
+	cmd := exec.Command(harnessBin, "diagrams", good, bad)
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 1 {
+		t.Fatalf("diagrams on a broken file: err %v, want exit 1", err)
+	}
+	inOrder(t, string(out), bad+":4:3: ┬ has an open down arm", bad+":5:4: │ reaches up into ─")
+	if _, err := exec.Command(harnessBin, "diagrams", filepath.Join(f.tmp, "missing.md")).Output(); err == nil {
+		t.Error("missing file succeeded")
+	}
+}
