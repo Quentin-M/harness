@@ -1,0 +1,21 @@
+# pstack role line -> models.yaml role(s). Labels match setup-pstack's sheet exactly.
+# A list means a panel: one subagent per entry, so panels span two model families.
+budget: large
+
+"feature, refactoring": default
+bug-fix: default
+perf-issue: default
+hillclimb: default
+judgment and prose: default
+hardest tasks: default
+how explorer: default
+how explainer: default
+why investigators: default
+why synthesizer: default
+reflect tooling: default
+"reflect judgment, divergent, synthesizer": default
+arena runners: [default, review]
+arena cross-judge pool: [default, review]
+swarm workers: default
+architect runners: [default, review]
+interrogate reviewers: [default, review]

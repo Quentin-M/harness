@@ -1,0 +1,148 @@
+version: "0.2"
+name: gg
+culture_file: CULTURE.md
+permission_policy: builtin:yolo  # claude --dangerously-skip-permissions, codex danger-full-access
+summary: >
+  gg delivery team. lead pod (primary + peer) dispatches through the queue; dev designs and
+  builds; verify proves each head SHA live and reviews the diff. Start with
+  rig up rigs/gg/rig.yaml.
+
+pods:
+  - id: lead
+    label: Lead
+    members:
+      - id: lead
+        agent_ref: "local:../../agents/lead"
+        profile: primary
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        compaction_strategy: managed-compaction
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: peer
+        agent_ref: "local:../../agents/lead"
+        profile: peer
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+    edges:
+      - {kind: collaborates_with, from: peer, to: lead}
+
+  - id: dev
+    label: Development
+    members:
+      - id: architect
+        agent_ref: "local:../../agents/architect"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-1
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-2
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-3
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: engineer-4
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+    edges: []
+
+  - id: verify
+    label: Verification
+    members:
+      - id: verifier-1
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: verifier-2
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: reviewer-1
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: claude-code
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+      - id: reviewer-2
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: claude-code
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/gg
+    edges: []
+
+edges:
+  # dispatch: primary owns every stream; peer covers the verify pod
+  - {kind: delegates_to, from: lead.lead, to: dev.architect}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-1}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-2}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-3}
+  - {kind: delegates_to, from: lead.lead, to: dev.engineer-4}
+  - {kind: delegates_to, from: lead.lead, to: verify.verifier-1}
+  - {kind: delegates_to, from: lead.lead, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-1}
+  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-2}
+  # engineers hand their head SHA to a verifier
+  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-2}
+  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-1}
+  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-2}
+  # verification reads dev output
+  - {kind: can_observe, from: verify.verifier-1, to: dev.architect}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.verifier-1, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.architect}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.verifier-2, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.architect}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.reviewer-1, to: dev.engineer-4}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.architect}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-1}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-2}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-3}
+  - {kind: can_observe, from: verify.reviewer-2, to: dev.engineer-4}
+  # escalation route
+  - {kind: escalates_to, from: dev.architect, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-1, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-2, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-3, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-4, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-1, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-2, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-1, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-2, to: lead.lead}

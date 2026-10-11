@@ -1,0 +1,7 @@
+schema: openrig.workspace/v0alpha1
+projects:
+  - id: default
+    root: .
+  - id: gg
+    root: ~/workspace/gg/.openrig
+    rigs: [gg]

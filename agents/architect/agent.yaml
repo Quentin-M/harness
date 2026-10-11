@@ -1,0 +1,19 @@
+name: architect
+version: "1.0"
+description: Writes the design (budget table, fault matrix, structures, test plan) before any code. Never codes.
+
+defaults:
+  runtime: claude-code
+  lifecycle:
+    restore_policy: relaunch_fresh
+
+profiles:
+  default: {}
+
+startup:
+  files:
+    - path: role.md
+      orientation: role
+      delivery_hint: send_text
+      required: true
+  actions: []

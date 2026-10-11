@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# pr-proof <pr-number> <files...> [-m "bullet"]... [--repo owner/name] [--branch proof-media]
+#   Attach proof media to a GitHub PR. GitHub has no API for comment uploads, so the files are
+#   committed (one commit, git data API) to an orphan branch at pr-<n>/<head-sha>/, then a PR
+#   comment embeds them: images inline, video as links. Links are commit-pinned
+#   github.com/.../blob/<sha>/...?raw=true, which render for anyone who can read the repo,
+#   private repos included.
+#   -m        verification bullet, repeatable (1-3 is the norm)
+#   --repo    default: the repo of the current directory
+#   --branch  default: proof-media
+# Prints the comment URL.
+
+source "$(dirname "$0")/lib.sh"
+repo="" branch=proof-media notes=() pos=()
+while (($#)); do
+  case $1 in
+    -h|--help) usage ;;
+    -m) notes+=("${2:?}"); shift ;;
+    --repo) repo=${2:?}; shift ;;
+    --branch) branch=${2:?}; shift ;;
+    *) pos+=("$1") ;;
+  esac
+  shift
+done
+((${#pos[@]} >= 2)) || usage 1
+need gh "brew install gh"
+need jq "brew install jq"
+pr=${pos[0]} files=("${pos[@]:1}")
+[[ $pr =~ ^[0-9]+$ ]] || die "pr must be a number, got: $pr"
+for f in "${files[@]}"; do [[ -f $f ]] || die "no such file: $f"; done
+repo=${repo:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
+head=$(gh api "repos/$repo/pulls/$pr" -q .head.sha)
+dir=pr-$pr/${head:0:12}
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# One blob per file, then a tree on top of the branch's current tree (if the branch exists).
+entries=$tmp/entries.json
+echo '[]' >"$entries"
+for f in "${files[@]}"; do
+  jq -n --rawfile c <(base64 <"$f" | tr -d '\n') '{content: $c, encoding: "base64"}' >"$tmp/blob.json"
+  sha=$(gh api "repos/$repo/git/blobs" --input "$tmp/blob.json" -q .sha)
+  jq --arg p "$dir/$(basename "$f")" --arg s "$sha" '. + [{path: $p, mode: "100644", type: "blob", sha: $s}]' \
+    "$entries" >"$entries.new" && mv "$entries.new" "$entries"
+done
+
+# gh prints the 404 body on stdout, so test the exit status rather than the output.
+parent=""
+if out=$(gh api "repos/$repo/git/ref/heads/$branch" -q .object.sha 2>/dev/null); then parent=$out; fi
+if [[ -n $parent ]]; then
+  base=$(gh api "repos/$repo/git/commits/$parent" -q .tree.sha)
+  jq --arg b "$base" '{base_tree: $b, tree: .}' "$entries" >"$tmp/tree.json"
+else
+  jq '{tree: .}' "$entries" >"$tmp/tree.json"
+fi
+tree=$(gh api "repos/$repo/git/trees" --input "$tmp/tree.json" -q .sha)
+jq -n --arg t "$tree" --arg p "$parent" --arg m "proof: PR #$pr at ${head:0:12}" \
+  '{message: $m, tree: $t, parents: (if $p == "" then [] else [$p] end)}' >"$tmp/commit.json"
+commit=$(gh api "repos/$repo/git/commits" --input "$tmp/commit.json" -q .sha)
+if [[ -n $parent ]]; then
+  gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$commit" >/dev/null
+else
+  gh api "repos/$repo/git/refs" -f ref="refs/heads/$branch" -f sha="$commit" >/dev/null
+fi
+
+{
+  echo "<!-- harness:proof $head -->"
+  echo "### Verification at \`${head:0:12}\`"
+  echo
+  for n in "${notes[@]}"; do echo "- $n"; done
+  ((${#notes[@]})) && echo
+  for f in "${files[@]}"; do
+    name=$(basename "$f")
+    url="https://github.com/$repo/blob/$commit/$dir/$name?raw=true"
+    case ${name,,} in
+      *.png|*.jpg|*.jpeg|*.gif|*.svg|*.webp) printf '**%s**\n\n![%s](%s)\n\n' "$name" "$name" "$url" ;;
+      *) printf -- '- [%s](%s)\n' "$name" "$url" ;;
+    esac
+  done
+} >"$tmp/body.md"
+
+gh api "repos/$repo/issues/$pr/comments" -F body=@"$tmp/body.md" -q .html_url

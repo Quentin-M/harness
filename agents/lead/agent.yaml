@@ -1,0 +1,32 @@
+name: lead
+version: "1.0"
+description: HA lead pair. primary runs the main stream and talks to Q; peer covers stuck seats and brings a second model.
+
+defaults:
+  runtime: claude-code
+  lifecycle:
+    restore_policy: resume_if_possible
+
+profiles:
+  primary:
+    summary: Main stream, dispatch, Q communication, final call.
+    startup:
+      files:
+        - path: primary.md
+          delivery_hint: send_text
+          required: true
+  peer:
+    summary: Coverage, stuck and idle seats, second-model perspective, review convergence.
+    startup:
+      files:
+        - path: peer.md
+          delivery_hint: send_text
+          required: true
+
+startup:
+  files:
+    - path: role.md
+      orientation: role
+      delivery_hint: send_text
+      required: true
+  actions: []
