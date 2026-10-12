@@ -69,14 +69,8 @@ func (H) Sync(ctx *harness.Ctx) error {
 			"Bash(git push --force-with-lease *)", "Bash(git push --force-with-lease=*)"}},
 		Hooks: hooks,
 	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(s); err != nil {
-		return err
-	}
-	if err := fsx.Write(filepath.Join(d, "settings.json"), buf.Bytes()); err != nil {
+	path := filepath.Join(d, "settings.json")
+	if err := writeSettings(path, s); err != nil {
 		return err
 	}
 	if err := fsx.Write(filepath.Join(d, "CLAUDE.md"), []byte(ctx.Layers.Instructions(m, "claude"))); err != nil {
@@ -86,6 +80,31 @@ func (H) Sync(ctx *harness.Ctx) error {
 		return err
 	}
 	return ctx.Layers.LinkSkills(filepath.Join(d, "skills"))
+}
+
+// writeSettings sets the launcher's top-level keys over the existing settings.json, so keys
+// claude writes itself (enabledPlugins from `claude plugin install`) survive a relaunch.
+// Launcher keys replace whole values: a deep merge would keep hooks a previous launch wrote.
+func writeSettings(path string, s settings) error {
+	have, err := fsx.ReadJSON(path)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	ours, err := fsx.ParseJSON(raw)
+	if err != nil {
+		return err
+	}
+	for _, k := range fsx.Keys(ours) {
+		fsx.Put(have, k, ours[k])
+	}
+	if s.APIKeyHelper == "" {
+		delete(have, "apiKeyHelper") // a gateway helper left from a previous launch would hijack auth
+	}
+	return fsx.Write(path, fsx.DumpJSON(have))
 }
 
 func (H) Env(ctx *harness.Ctx) error {
