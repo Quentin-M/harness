@@ -33,6 +33,8 @@ func (H) Env(ctx *harness.Ctx) error {
 		return err
 	}
 	ctx.Env["OPENRIG_HOME"] = dir(ctx.State)
+	// the workspace specs root holds workflows/; the library root below holds agents/ and rigs/
+	ctx.Env["OPENRIG_WORKSPACE_SPECS_ROOT"] = ctx.Root
 	ctx.Env["OPENRIG_NO_KERNEL"] = "1" // the kernel auto-boots its own claude-code operator seats
 	// The daemon's codex activity hooks land after harness' memory hooks but record trust for group 0,
 	// overwriting the memory hooks' trust; harness sync rewrites config.toml without its block anyway.
@@ -48,6 +50,9 @@ func (H) Sync(ctx *harness.Ctx) error {
 		return err
 	}
 	if err := (codex.H{}).Sync(ctx); err != nil {
+		return err
+	}
+	if err := linkSpecLibrary(ctx); err != nil {
 		return err
 	}
 	return syncCatalog(ctx)
