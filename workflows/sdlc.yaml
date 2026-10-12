@@ -1,4 +1,4 @@
-# architect -> engineer -> reviewer -> verifier -> judge, one change per instance.
+# architect -> reviewer -> engineer -> reviewer -> verifier -> judge, one change per instance.
 # Exit meaning: handoff = pass, failed = rework (build) or infeasible design (from build).
 # waiting stays a real park.
 workflow:
@@ -10,7 +10,13 @@ workflow:
   entry:
     role: architect
   coordination_terminal_turn_rule: hot_potato
+  # stuck or unmapped exceptions go to the peer (seat health), never to the lead
+  exception_routing:
+    default: orchestrator
+    orchestrator_role: peer
   roles:
+    peer:
+      preferred_targets: [lead-peer@gg]
     architect: {}
     engineer: {}
     reviewer: {}
@@ -21,15 +27,19 @@ workflow:
       actor_role: architect
       objective: Budget, fault matrix, acceptance and test plan.
       allowed_exits: [handoff, waiting, failed]
-      next_hop: {mode: require, suggested_roles: [engineer]}
+      next_hop: {on: {handoff: design_review}}
+    - id: design_review
+      actor_role: reviewer
+      objective: Review the design brief before any code. Failed sends it back to design.
+      allowed_exits: [handoff, waiting, failed]
+      next_hop:
+        on: {handoff: build, failed: design}
     - id: build
       actor_role: engineer
       objective: Implement against the design, tests first. Failed means the design cannot be built as written; it goes back to design.
       allowed_exits: [handoff, waiting, failed]
       next_hop:
-        mode: require
-        suggested_roles: [reviewer]
-        on: {failed: design}
+        on: {handoff: review, failed: design}
     - id: review
       actor_role: reviewer
       objective: Code review against the rules. Failed sends the findings back to build.
