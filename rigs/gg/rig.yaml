@@ -31,113 +31,147 @@ pods:
     label: Development
     members:
       - id: architect
+        role: architect
         agent_ref: "local:../../agents/architect"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-1
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-2
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-3
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-4
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-5
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-6
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-7
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: engineer-8
+        role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
-    edges: []
+    edges:
+      - {kind: collaborates_with, from: architect, to: engineer-1}
+      - {kind: collaborates_with, from: engineer-1, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-2}
+      - {kind: collaborates_with, from: engineer-2, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-3}
+      - {kind: collaborates_with, from: engineer-3, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-4}
+      - {kind: collaborates_with, from: engineer-4, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-5}
+      - {kind: collaborates_with, from: engineer-5, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-6}
+      - {kind: collaborates_with, from: engineer-6, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-7}
+      - {kind: collaborates_with, from: engineer-7, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-8}
+      - {kind: collaborates_with, from: engineer-8, to: architect}
 
   - id: verify
     label: Verification
     members:
       - id: verifier-1
+        role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: verifier-2
+        role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: verifier-3
+        role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: verifier-4
+        role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-1
+        role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-2
+        role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-3
+        role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: reviewer-4
+        role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
       - id: judge
+        role: judge
         agent_ref: "local:../../agents/judge"
         profile: default
         runtime: claude-code
@@ -203,6 +237,15 @@ edges:
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-2}
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-3}
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-4}
+  # reviewers and verifiers send a design problem back to the architect
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.architect}
   - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-1}
   - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-2}
   - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-3}
