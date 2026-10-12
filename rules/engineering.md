@@ -77,8 +77,7 @@ Every hot-path op is O(1) or O(log n), with capacity bounded by the budget.
 
 - Stream through short fixed buffers. Memory stays bounded by the buffer
   size, whatever the input size.
-- Hot path makes 0 roundtrips: co-locate, cache in process, batch and
-  pipeline the rest.
+- Hot path makes 0 roundtrips: co-locate, cache in process, batch and pipeline the rest.
 - Batch syscalls (io_uring, epoll, vectored I/O). The hot loop never
   calls syscalls, logs or allocates.
 - SIMD over arrays; GPU for bulk parallel math.
@@ -97,7 +96,7 @@ Every hot-path op is O(1) or O(log n), with capacity bounded by the budget.
 
 - In-process cache before any db/redis roundtrip: bounded, TTL, W-TinyLFU.
 - Invalidate by event: distributed invalidation messages, versioned keys.
-- Fan-out: Kafka when consumers replay on start; Aeron or pod-to-pod
+- Fan-out: Kafka when consumers need replay on start; Aeron or pod-to-pod
   gossip/pub-sub otherwise.
 
 ## 9. Storage
