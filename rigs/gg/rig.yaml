@@ -214,7 +214,6 @@ pods:
       - {kind: collaborates_with, from: reviewer-1, to: verifier-6}
       - {kind: collaborates_with, from: reviewer-1, to: verifier-7}
       - {kind: collaborates_with, from: reviewer-1, to: verifier-8}
-      - {kind: collaborates_with, from: reviewer-1, to: judge}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-3}
@@ -223,7 +222,6 @@ pods:
       - {kind: collaborates_with, from: reviewer-2, to: verifier-6}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-7}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-8}
-      - {kind: collaborates_with, from: reviewer-2, to: judge}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-3}
@@ -232,7 +230,6 @@ pods:
       - {kind: collaborates_with, from: reviewer-3, to: verifier-6}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-7}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-8}
-      - {kind: collaborates_with, from: reviewer-3, to: judge}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-3}
@@ -241,7 +238,6 @@ pods:
       - {kind: collaborates_with, from: reviewer-4, to: verifier-6}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-7}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-8}
-      - {kind: collaborates_with, from: reviewer-4, to: judge}
       - {kind: collaborates_with, from: verifier-1, to: judge}
       - {kind: collaborates_with, from: verifier-2, to: judge}
       - {kind: collaborates_with, from: verifier-3, to: judge}
@@ -293,6 +289,39 @@ edges:
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-2}
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-3}
   - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-4}
+  # engineer hands the head to a reviewer
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-4}
   # reviewers and verifiers send a design problem back to the architect
   - {kind: collaborates_with, from: verify.reviewer-1, to: dev.architect}
   - {kind: collaborates_with, from: verify.verifier-1, to: dev.architect}
