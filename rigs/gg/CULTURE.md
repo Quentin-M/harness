@@ -10,7 +10,7 @@ over any row, brief or message.
                     ▲ rows blocked on the lead (decisions only)
  ┌──────────────────┴─────────────────────────────────────────────┐
  │ architect ─▶ reviewer ─approve─▶ engineer                      │
- │ engineer ─head─▶ verifier ─verified─▶ reviewer ─approve─▶ judge│
+ │ engineer ─head─▶ reviewer ─approve─▶ verifier ─verified─▶ judge│
  │ reviewer / verifier ─changes|failed─▶ engineer                 │
  │ judge ─reject─▶ owning reviewer|verifier   judge ─accept─▶ close│
  └────────────────────────────────────────────────────────────────┘

@@ -57,13 +57,11 @@ Record it with `rig proof add` per the mission playbook.
 ## Handoff
 
 - **changes:** `rig queue handoff` to the least-loaded engineer (`least-loaded engineer`), body =
-  the drop path and findings. The engineer returns the new head to a verifier, which brings it
-  back to a reviewer.
-- **approve:** `rig queue handoff` to the least-loaded verifier, unless the row says the verifier
-  already holds evidence at this SHA, in which case hand to the judge.
+  the drop path and findings. The engineer returns the new head to a reviewer.
+- **approve:** `rig queue handoff` to the least-loaded verifier, body = the review drop path.
 - A question for the engineer or verifier: `rig send` them directly. Never route through the lead.
 - A decision only Q can make: `rig queue block <qitem> --on lead-lead@<rig>` with the exact question
   and options.
 
 **/goal:** `review-<sha8>.md exists for <slice> at <sha>, every finding cites file:line and a rule,
-and the row is handed to an engineer, verifier or judge.`
+and the row is handed to an engineer or a verifier.`

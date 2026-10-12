@@ -45,9 +45,9 @@ verify  reviewer-1…N               gpt-6.1-sol, code review only
         verifier-1…N               opus-5-5[1m], machine evidence + media
         judge                      opus-5-5[1m], accepts proof, closes slices
 
-engineer ─head─▶ verifier ─▶ reviewer ─approve─▶ judge ─accept─▶ closed
-    ▲                │ failed       │ changes        │ reject ─▶ owning seat
-    └────────────────┴──────────────┘
+engineer ─head─▶ reviewer ─approve─▶ verifier ─▶ judge ─accept─▶ closed
+    ▲                │ changes           │ failed   │ reject ─▶ owning seat
+    └────────────────┴───────────────────┘
 ```
 
 Seats hand off to each other through the queue and relaunch blank after each row

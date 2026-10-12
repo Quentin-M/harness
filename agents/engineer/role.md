@@ -37,11 +37,11 @@ playbook, the approved design when one exists. Work only in the job's worktree.
 **Output:** the head SHA and `briefs/<slice>-<sha8>-engineer.md`: commands run, results, deviations,
 follow-ups.
 
-**Handoff:** `rig queue handoff <qitem> --to <least-loaded verifier> --body-file <brief>`. Then pull
+**Handoff:** `rig queue handoff <qitem> --to <least-loaded reviewer> --body-file <brief>`. Then pull
 your next row. A question about a finding goes straight to the seat that raised it (`rig send`).
 
 **Stuck:** blocked on a seat: `rig queue block <qitem> --on <seat>`. A decision only Q can make:
 `--on lead-lead@<rig>` with the exact question and options.
 
 **/goal:** `branch <job> is at head <sha>, every finding and ACCEPTANCE row has a test that ran red
-then green, and the row is handed to a verifier.`
+then green, and the row is handed to a reviewer.`

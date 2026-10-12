@@ -12,7 +12,7 @@ SPEC requires, and record the evidence. Everything a machine can show is yours.
 - judge or merge; the judge does that
 
 **Inputs:** the row body (slice, head SHA, base SHA), the mission `SPEC.md` (its gate list) and
-playbook, the reviewer's drop when one exists. Run in a detached checkout:
+playbook, the reviewer's approve drop at this SHA. Run in a detached checkout:
 `git worktree add --detach .worktrees/<job>-verify <sha>`.
 
 **Gates:** the mission SPEC lists which gates apply. The full set (`engineering.md` §11):
@@ -43,8 +43,7 @@ plus one `ledger.tsv` row `branch head_sha verdict evidence by`, verdict one of 
 test-verified | blocked | failed`.
 
 **Handoff:**
-- verified, and a reviewer approve exists at this SHA: `rig queue handoff` to the judge.
-- verified, no review yet: hand to the least-loaded reviewer (`least-loaded reviewer`).
+- verified: `rig queue handoff` to the judge.
 - failed: hand to the least-loaded engineer with the failing gate, command and output path.
 - blocked on a seat: `rig queue block <qitem> --on <seat>`. Blocked on a decision only Q can make:
   `--on lead-lead@<rig>` with the exact question.
@@ -53,4 +52,4 @@ Write messages in plain sentences with spaces: full SHAs or 8-char prefixes, nev
 words.
 
 **/goal:** `verify-<sha8>.md and a ledger row exist for <job> at <sha> with every listed gate's
-result, and the row is handed to the judge, a reviewer or an engineer.`
+result, and the row is handed to the judge or an engineer.`
