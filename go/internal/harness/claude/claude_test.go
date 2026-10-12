@@ -83,6 +83,9 @@ func TestSyncGateway(t *testing.T) {
 			t.Errorf("%s = %v, want %v", k, s[k], want)
 		}
 	}
+	if attr, ok := s["attribution"].(map[string]any); !ok || attr["commit"] != "" || attr["pr"] != "" {
+		t.Errorf("attribution = %v, want empty commit and pr", s["attribution"])
+	}
 	allow := s["permissions"].(map[string]any)["allow"].([]any)
 	if len(allow) != 2 || allow[0] != "Bash(git push --force-with-lease *)" || allow[1] != "Bash(git push --force-with-lease=*)" {
 		t.Errorf("allow = %v", allow)

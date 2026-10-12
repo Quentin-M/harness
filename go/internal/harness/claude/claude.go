@@ -36,8 +36,14 @@ type settings struct {
 	SkipPrompt   bool                `json:"skipDangerousModePermissionPrompt"`
 	AutoMemory   bool                `json:"autoMemoryEnabled"` // mnemopi is the one memory, shared with codex, omp and rig
 	Permissions  map[string][]string `json:"permissions"`
+	Attribution  attribution         `json:"attribution"` // empty strings drop the Co-Authored-By and PR footer
 	Hooks        orderedHooks        `json:"hooks"`
 	APIKeyHelper string              `json:"apiKeyHelper,omitempty"`
+}
+
+type attribution struct {
+	Commit string `json:"commit"`
+	PR     string `json:"pr"`
 }
 
 func (H) Sync(ctx *harness.Ctx) error {
