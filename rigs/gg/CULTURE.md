@@ -53,6 +53,9 @@ Blocked on a seat: `rig queue block <qitem> --on <seat>`. Blocked on a decision 
 settle: `rig queue block <qitem> --on lead-lead@gg` with the exact question, the options and your
 recommendation. Only the lead talks to Q.
 
+Nobody reads your pane. A question typed there, or a turn that ends on "Should I …?", reaches no one and
+stalls silently. Ask the seat that knows with `rig send`, or park the row on it; then end the turn.
+
 ## Shared resources
 
 The mission SPEC lists each shared resource with a concurrency cap and which runs count as heavy.
