@@ -25,7 +25,7 @@ pods:
         model: gpt-6.1-sol
         cwd: /Users/quentin.machu-ext/Workspace/gg
     edges:
-      - {kind: collaborates_with, from: peer, to: lead}
+      - {kind: delegates_to, from: lead, to: peer}
 
   - id: dev
     label: Development
@@ -148,156 +148,125 @@ pods:
       - {kind: collaborates_with, from: reviewer-1, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-1, to: verifier-3}
       - {kind: collaborates_with, from: reviewer-1, to: verifier-4}
-      - {kind: delegates_to, from: reviewer-1, to: judge}
+      - {kind: collaborates_with, from: reviewer-1, to: judge}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-3}
       - {kind: collaborates_with, from: reviewer-2, to: verifier-4}
-      - {kind: delegates_to, from: reviewer-2, to: judge}
+      - {kind: collaborates_with, from: reviewer-2, to: judge}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-3}
       - {kind: collaborates_with, from: reviewer-3, to: verifier-4}
-      - {kind: delegates_to, from: reviewer-3, to: judge}
+      - {kind: collaborates_with, from: reviewer-3, to: judge}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-2}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-3}
       - {kind: collaborates_with, from: reviewer-4, to: verifier-4}
-      - {kind: delegates_to, from: reviewer-4, to: judge}
-      - {kind: delegates_to, from: verifier-1, to: judge}
-      - {kind: delegates_to, from: verifier-2, to: judge}
-      - {kind: delegates_to, from: verifier-3, to: judge}
-      - {kind: delegates_to, from: verifier-4, to: judge}
-      - {kind: delegates_to, from: judge, to: reviewer-1}
-      - {kind: delegates_to, from: judge, to: reviewer-2}
-      - {kind: delegates_to, from: judge, to: reviewer-3}
-      - {kind: delegates_to, from: judge, to: reviewer-4}
-      - {kind: delegates_to, from: judge, to: verifier-1}
-      - {kind: delegates_to, from: judge, to: verifier-2}
-      - {kind: delegates_to, from: judge, to: verifier-3}
-      - {kind: delegates_to, from: judge, to: verifier-4}
+      - {kind: collaborates_with, from: reviewer-4, to: judge}
+      - {kind: collaborates_with, from: verifier-1, to: judge}
+      - {kind: collaborates_with, from: verifier-2, to: judge}
+      - {kind: collaborates_with, from: verifier-3, to: judge}
+      - {kind: collaborates_with, from: verifier-4, to: judge}
+      - {kind: collaborates_with, from: judge, to: reviewer-1}
+      - {kind: collaborates_with, from: judge, to: reviewer-2}
+      - {kind: collaborates_with, from: judge, to: reviewer-3}
+      - {kind: collaborates_with, from: judge, to: reviewer-4}
+      - {kind: collaborates_with, from: judge, to: verifier-1}
+      - {kind: collaborates_with, from: judge, to: verifier-2}
+      - {kind: collaborates_with, from: judge, to: verifier-3}
+      - {kind: collaborates_with, from: judge, to: verifier-4}
 
 edges:
-  # lead dispatches missions; it is the orchestrator of last resort for every seat
-  - {kind: delegates_to, from: lead.lead, to: dev.architect}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-1}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-2}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-3}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-4}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-5}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-6}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-7}
-  - {kind: delegates_to, from: lead.lead, to: dev.engineer-8}
-  - {kind: delegates_to, from: lead.lead, to: verify.verifier-1}
-  - {kind: delegates_to, from: lead.lead, to: verify.verifier-2}
-  - {kind: delegates_to, from: lead.lead, to: verify.verifier-3}
-  - {kind: delegates_to, from: lead.lead, to: verify.verifier-4}
-  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-1}
-  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-2}
-  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-3}
-  - {kind: delegates_to, from: lead.lead, to: verify.reviewer-4}
-  - {kind: delegates_to, from: lead.lead, to: verify.judge}
-  # direct handoffs: the sender of a row is its orchestrator, so stuck rows escalate to it
-  - {kind: delegates_to, from: dev.architect, to: verify.reviewer-1}
-  - {kind: delegates_to, from: dev.architect, to: verify.reviewer-2}
-  - {kind: delegates_to, from: dev.architect, to: verify.reviewer-3}
-  - {kind: delegates_to, from: dev.architect, to: verify.reviewer-4}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.reviewer-1, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.reviewer-2, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.reviewer-3, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.reviewer-4, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.verifier-1, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.verifier-2, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.verifier-3, to: dev.engineer-8}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-1}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-2}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-3}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-4}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-5}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-6}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-7}
-  - {kind: delegates_to, from: verify.verifier-4, to: dev.engineer-8}
-  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-1, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-2, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-3, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-4, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-5, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-6, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-7, to: verify.verifier-4}
-  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-1}
-  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-2}
-  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-3}
-  - {kind: delegates_to, from: dev.engineer-8, to: verify.verifier-4}
+  # launch order and orchestrator: lead ─▶ peer ─▶ every worker, so a stuck row escalates to the
+  # peer (seat health), never to the lead
+  - {kind: delegates_to, from: lead.peer, to: dev.architect}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-1}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-2}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-3}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-4}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-5}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-6}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-7}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-8}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-4}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-4}
+  - {kind: delegates_to, from: lead.peer, to: verify.judge}
+  # direct handoffs (visible in rig whoami; no queue effect)
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-8}
   # decisions only Q can make
   - {kind: escalates_to, from: dev.architect, to: lead.lead}
   - {kind: escalates_to, from: dev.engineer-1, to: lead.lead}
