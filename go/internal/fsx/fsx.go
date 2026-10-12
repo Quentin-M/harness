@@ -3,8 +3,10 @@ package fsx
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -132,6 +134,76 @@ func fromNode(n *yaml.Node) (any, error) {
 	var v any
 	err := n.Decode(&v)
 	return v, err
+}
+
+// ReadJSON parses a JSON object, keeping key order; a missing file is an empty map.
+func ReadJSON(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m, err := ParseJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return m, nil
+}
+
+// ParseJSON parses one JSON object, keeping key order (see Keys) and numbers as written.
+func ParseJSON(data []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	v, err := jsonValue(dec)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, errors.New("trailing data after JSON object")
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, errors.New("top level is not an object")
+	}
+	return m, nil
+}
+
+func jsonValue(dec *json.Decoder) (any, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	switch tok {
+	case json.Delim('{'):
+		m := map[string]any{}
+		for dec.More() {
+			k, err := dec.Token()
+			if err != nil {
+				return nil, err
+			}
+			v, err := jsonValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			Put(m, k.(string), v)
+		}
+		_, err := dec.Token()
+		return m, err
+	case json.Delim('['):
+		out := []any{}
+		for dec.More() {
+			v, err := jsonValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, v)
+		}
+		_, err := dec.Token()
+		return out, err
+	}
+	return tok, nil
 }
 
 // DumpYAML is PyYAML safe_dump(sort_keys=False, width=1000): map keys in insertion order.

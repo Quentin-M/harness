@@ -156,6 +156,25 @@ func TestSplitFrontmatter(t *testing.T) {
 	}
 }
 
+func TestParseJSONRoundTripsOrderAndNumbers(t *testing.T) {
+	in := "{\n  \"z\": 1,\n  \"a\": {\n    \"y\": 1.5,\n    \"b\": [\n      true,\n      null,\n      \"s\"\n    ]\n  },\n  \"n\": 12345678901234567890\n}\n"
+	m, err := ParseJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(DumpJSON(m)); got != in {
+		t.Fatalf("got\n%s\nwant\n%s", got, in)
+	}
+	for _, bad := range []string{`[1]`, `{"a":1} {}`, `{"a":`, ``} {
+		if _, err := ParseJSON([]byte(bad)); err == nil {
+			t.Errorf("ParseJSON(%q) = nil error", bad)
+		}
+	}
+	if m, err := ReadJSON(filepath.Join(t.TempDir(), "missing.json")); err != nil || len(m) != 0 {
+		t.Fatal(m, err)
+	}
+}
+
 func TestDumpJSONMatchesPython(t *testing.T) {
 	v := OMap("model", "big[1m]", "on", true, "n", 30, "list", []any{"a", OMap("k", "v")}, "empty", map[string]any{},
 		"uni", "é\"\n")

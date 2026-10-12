@@ -145,6 +145,50 @@ func TestModelNarrowContext(t *testing.T) {
 	}
 }
 
+func TestSyncKeepsClaudeOwnedKeys(t *testing.T) {
+	ctx := fixture(t, &model.Config{Raw: map[string]any{}})
+	path := filepath.Join(ctx.State, "claude", "settings.json")
+	write(t, path, `{"enabledPlugins": {"slack@claude-plugins-official": true}, "model": "stale",
+		"apiKeyHelper": "old-gw-key", "hooks": {"PreToolUse": []}, "statusLine": {"type": "command", "padding": 0}}`, 0o644)
+	for range 2 {
+		if err := (H{}).Sync(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := settingsOf(t, ctx)
+	if p, _ := s["enabledPlugins"].(map[string]any); p["slack@claude-plugins-official"] != true {
+		t.Errorf("enabledPlugins = %v, want slack kept", s["enabledPlugins"])
+	}
+	if sl, _ := s["statusLine"].(map[string]any); sl["padding"] != 0.0 {
+		t.Errorf("statusLine = %v, want kept", s["statusLine"])
+	}
+	if s["model"] == "stale" || s["outputStyle"] != Style {
+		t.Errorf("launcher keys not applied: model=%v outputStyle=%v", s["model"], s["outputStyle"])
+	}
+	if _, ok := s["apiKeyHelper"]; ok {
+		t.Errorf("stale apiKeyHelper kept: %v", s["apiKeyHelper"])
+	}
+	if _, ok := s["hooks"].(map[string]any)["PreToolUse"]; ok {
+		t.Errorf("stale hook event kept: %v", s["hooks"])
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(raw), "{\n  \"enabledPlugins\"") {
+		t.Errorf("existing key order lost:\n%s", raw)
+	}
+}
+
+func TestSyncRejectsCorruptSettings(t *testing.T) {
+	ctx := fixture(t, gateway())
+	path := filepath.Join(ctx.State, "claude", "settings.json")
+	write(t, path, `{"enabledPlugins": `, 0o644)
+	if err := (H{}).Sync(ctx); err == nil || !strings.Contains(err.Error(), "settings.json") {
+		t.Fatalf("err = %v, want parse error naming settings.json", err)
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != `{"enabledPlugins": ` {
+		t.Errorf("corrupt file overwritten: %q", raw)
+	}
+}
+
 func TestNoMemoryHooksWithoutBun(t *testing.T) {
 	ctx := fixture(t, gateway())
 	ctx.Env["HARNESS_BUN_BIN"] = filepath.Join(ctx.Cwd, "no-bun")
