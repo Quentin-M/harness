@@ -1,0 +1,57 @@
+# architect -> engineer -> reviewer -> verifier -> judge, one change per instance.
+# Exit meaning: handoff = pass, failed = rework (build) or infeasible design (from build).
+# waiting stays a real park.
+workflow:
+  id: sdlc
+  version: 1
+  objective: Take one change from design to merge, with bounded rework loops.
+  target:
+    rig: gg
+  entry:
+    role: architect
+  coordination_terminal_turn_rule: hot_potato
+  roles:
+    architect: {}
+    engineer: {}
+    reviewer: {}
+    verifier: {}
+    judge: {}
+  steps:
+    - id: design
+      actor_role: architect
+      objective: Budget, fault matrix, acceptance and test plan.
+      allowed_exits: [handoff, waiting, failed]
+      next_hop: {mode: require, suggested_roles: [engineer]}
+    - id: build
+      actor_role: engineer
+      objective: Implement against the design, tests first. Failed means the design cannot be built as written; it goes back to design.
+      allowed_exits: [handoff, waiting, failed]
+      next_hop:
+        mode: require
+        suggested_roles: [reviewer]
+        on: {failed: design}
+    - id: review
+      actor_role: reviewer
+      objective: Code review against the rules. Failed sends the findings back to build.
+      allowed_exits: [handoff, waiting, failed]
+      next_hop:
+        mode: require
+        suggested_roles: [verifier]
+        on: {failed: build}
+    - id: verify
+      actor_role: verifier
+      objective: Machine evidence at the head. Failed sends the red gate back to build.
+      allowed_exits: [handoff, waiting, failed]
+      next_hop:
+        mode: require
+        suggested_roles: [judge]
+        on: {failed: build}
+    - id: judge
+      actor_role: judge
+      objective: Accept and merge, or reject back to build.
+      allowed_exits: [done, waiting, failed]
+      next_hop:
+        mode: forbid
+        on: {failed: build}
+  loop_guards:
+    max_hops: 30
