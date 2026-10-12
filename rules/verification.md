@@ -8,5 +8,3 @@
   `proof` skill capture scripts. Read the artifacts back with the image-capable read tool. Q stays
   out of the loop.
 - **PRs carry proof.** 1-3 verification bullets (command, result) plus the captured media.
-- **In the pod, the builder never verifies its own work.** The verifier does, and its verdict is
-  keyed to the PR head SHA (`rigs/<project>/CULTURE.md`).
