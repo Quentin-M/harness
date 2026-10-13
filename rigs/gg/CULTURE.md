@@ -72,8 +72,9 @@ symptoms (socket timeouts, container conflicts) are not product failures: re-run
 
 ## Jobs and worktrees
 
-Paths below are relative to the gg checkout, the cwd you launched in. From inside a worktree, the
-checkout is `$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`.
+Paths below are relative to the gg checkout, `~/Workspace/gg`. You launch in your own seat dir,
+`.openrig/seats/<pod>-<member>`; `cd` to the checkout before any git or moon command. From inside a
+worktree, the checkout is `$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`.
 
 Each job has its own branch and worktree at `.worktrees/<job>` and its record at
 `.worktrees/.jobs/<job>/` (briefs, ledger, decisions, follow-ups). `.worktrees/` is gitignored.
