@@ -87,9 +87,7 @@ func TestSyncGateway(t *testing.T) {
 	if skills["enableAgentsUser"] != false || cfg["personality"] != "pragmatic" {
 		t.Errorf("base not merged: %v", cfg)
 	}
-	if cfg["memory"].(map[string]any)["backend"] != "mnemopi" ||
-		cfg["mnemopi"].(map[string]any)["dbPath"] != filepath.Join(ctx.State, "memory", "mnemopi.db") ||
-		cfg["mnemopi"].(map[string]any)["scoping"] != "global" {
+	if cfg["memory"].(map[string]any)["backend"] != "off" || cfg["mnemopi"] != nil {
 		t.Errorf("memory = %v %v", cfg["memory"], cfg["mnemopi"])
 	}
 	p := readYAML(t, filepath.Join(d, "models.yml"))["providers"].(map[string]any)["gw"].(map[string]any)

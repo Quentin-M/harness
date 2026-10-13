@@ -39,14 +39,6 @@ func (H) Name() string { return "omp" }
 // AgentDir is omp's PI_CODING_AGENT_DIR under the state dir.
 func AgentDir(state string) string { return filepath.Join(state, "omp", "agent") }
 
-// Memory is the shared mnemopi bank settings for omp and rig seats.
-func Memory(state string) map[string]any {
-	return fsx.OMap(
-		"memory", fsx.OMap("backend", "mnemopi"),
-		"mnemopi", fsx.OMap("scoping", "global", "dbPath", filepath.Join(state, "memory", "mnemopi.db")),
-	)
-}
-
 // StyleBody is the output style without frontmatter, left-trimmed (omp APPEND_SYSTEM.md).
 func StyleBody(ctx *harness.Ctx) string {
 	_, body := fsx.SplitFrontmatter(ctx.Layers.Style())
@@ -107,9 +99,8 @@ func (H) Sync(ctx *harness.Ctx) error {
 	if err != nil {
 		return err
 	}
-	mem := Memory(ctx.State)
 	over := fsx.OMap("modelRoles", fsx.OMap(kv...), "skills", fsx.OMap("enableAgentsUser", false),
-		"memory", mem["memory"], "mnemopi", mem["mnemopi"])
+		"memory", fsx.OMap("backend", "off"))
 	files := []struct {
 		name string
 		data []byte

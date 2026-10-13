@@ -66,7 +66,10 @@ Claude Code or Codex with the real HOME and read the generated `CLAUDE_CONFIG_DI
 managed settings (`ANTHROPIC_BASE_URL`, `apiKeyHelper`); `ANTHROPIC_BASE_URL` and `HARNESS_KEY_CMD`
 override them.
 
-Memory is automatic: every harness and seat shares one local Mnemopi bank under the state dir.
+Memory is Claude Code's per-project auto memory; codex and omp share the same directory through
+`harness memory path`. A launch starts `harness dream` once the last one is over 20h old: one
+headless claude per active project distils its recent sessions into that directory. Reports and
+the log live in `$HARNESS_STATE/dream/`.
 
 ## Add a rule
 

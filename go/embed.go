@@ -9,5 +9,5 @@ var Models []byte
 //go:embed assets/omp-base.yml
 var OmpBase []byte
 
-//go:embed assets/memory-hook.ts
-var MemoryHook []byte
+//go:embed assets/dream.md
+var Dream string

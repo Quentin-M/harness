@@ -42,7 +42,7 @@ func fixture(t *testing.T, m *model.Config) *harness.Ctx {
 	write(t, filepath.Join(h, "styles", "i-have-adhd.md"), "---\nname: i-have-adhd\n---\nSTYLE-BODY\n", 0o644)
 	write(t, filepath.Join(h, "skills", "trace", "SKILL.md"), "---\nname: trace\n---\nx\n", 0o644)
 	bins := filepath.Join(tmp, "bin")
-	for _, b := range []string{"codex", "bun"} {
+	for _, b := range []string{"codex"} {
 		write(t, filepath.Join(bins, b), "#!/bin/sh\necho real\n", 0o755)
 	}
 	home := filepath.Join(tmp, "home")
@@ -89,18 +89,6 @@ func TestSyncGateway(t *testing.T) {
 	if cx["features"].(map[string]any)["hooks"] != true {
 		t.Errorf("features = %v", cx["features"])
 	}
-	cmd := filepath.Join(ctx.Cwd, "bin", "bun") + " " + filepath.Join(ctx.State, "memory", "hook.ts") + " codex"
-	hooks := cx["hooks"].(map[string]any)
-	for _, e := range []string{"SessionStart", "UserPromptSubmit", "Stop"} {
-		groups := hooks[e].([]map[string]any)
-		h := groups[0]["hooks"].([]map[string]any)[0]
-		if h["command"] != cmd || h["type"] != "command" || h["timeout"] != int64(30) {
-			t.Errorf("%s hook = %v", e, h)
-		}
-		if _, async := h["async"]; async != (e == "SessionStart") {
-			t.Errorf("%s async = %v", e, h["async"])
-		}
-	}
 	for _, f := range []string{"AGENTS.md", "skills/trace/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(ctx.State, "codex", f)); err != nil {
 			t.Errorf("missing %s: %v", f, err)
@@ -126,8 +114,8 @@ func TestSyncPreservesTrust(t *testing.T) {
 	if hooks["state"].(map[string]any)["x:session_start:0:0"].(map[string]any)["trusted_hash"] != "sha256:abc" {
 		t.Errorf("hook trust lost: %v", hooks)
 	}
-	if _, ok := hooks["UserPromptSubmit"]; !ok {
-		t.Errorf("memory hooks lost")
+	if _, ok := hooks["Stop"]; ok {
+		t.Errorf("Stop hook written: %v", hooks["Stop"])
 	}
 	if cx["projects"].(map[string]any)["/w"].(map[string]any)["trust_level"] != "trusted" {
 		t.Errorf("projects lost: %v", cx["projects"])
@@ -137,9 +125,8 @@ func TestSyncPreservesTrust(t *testing.T) {
 	}
 }
 
-func TestSyncNoGatewayWithoutBun(t *testing.T) {
+func TestSyncNoGateway(t *testing.T) {
 	ctx := fixture(t, &model.Config{Raw: map[string]any{"roles": map[string]any{"default": "claude-opus-5-5"}}})
-	ctx.Env["HARNESS_BUN_BIN"] = filepath.Join(ctx.Cwd, "no-bun")
 	if err := (H{}).Sync(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +134,7 @@ func TestSyncNoGatewayWithoutBun(t *testing.T) {
 	if cx["model"] != "claude-opus-5-5" {
 		t.Errorf("model = %v", cx["model"])
 	}
-	for _, k := range []string{"model_provider", "model_providers", "hooks"} {
+	for _, k := range []string{"model_provider", "model_providers"} {
 		if _, ok := cx[k]; ok {
 			t.Errorf("unexpected %s", k)
 		}
@@ -198,10 +185,11 @@ func TestSyncTrustsHarnessHooks(t *testing.T) {
 		m, _ := st[filepath.Join(d, src)+":"+ev+":0:0"].(map[string]any)
 		return m
 	}
-	for _, ev := range []string{"session_start", "user_prompt_submit", "stop"} {
-		if h, _ := key("config.toml", ev)["trusted_hash"].(string); len(h) != len("sha256:")+64 {
-			t.Errorf("memory %s not trusted: %v", ev, key("config.toml", ev))
-		}
+	if got := key("config.toml", "session_start")["trusted_hash"]; got != hookHash("session_start", memoryHook(ctx.State)) {
+		t.Errorf("memory hook trust = %v", got)
+	}
+	if s := key("config.toml", "stop"); s != nil {
+		t.Errorf("config.toml stop trusted with no hook there: %v", s)
 	}
 	if got := key("hooks.json", "interrupt")["trusted_hash"]; got != hookHash("interrupt", claude.Hook{Type: "command", Command: herdr("idle"), Timeout: 3}) {
 		t.Errorf("herdr interrupt trust = %v", got)
@@ -211,6 +199,29 @@ func TestSyncTrustsHarnessHooks(t *testing.T) {
 	}
 	if s := key("hooks.json", "pre_tool_use"); s != nil {
 		t.Errorf("foreign hook trusted: %v", s)
+	}
+}
+
+func TestSyncMemoryHook(t *testing.T) {
+	ctx := fixture(t, gateway())
+	ctx.State = filepath.Join(ctx.Cwd, "my state")
+	if err := (H{}).Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	hooks := configOf(t, ctx)["hooks"].(map[string]any)
+	start, _ := hooks["SessionStart"].([]map[string]any)
+	if len(start) != 1 || start[0]["matcher"] != nil {
+		t.Fatalf("SessionStart = %v, want one matcher-less group", hooks["SessionStart"])
+	}
+	hs, _ := start[0]["hooks"].([]map[string]any)
+	want := "'" + filepath.Join(ctx.State, "bin", "harness") + "' memory context"
+	if len(hs) != 1 || hs[0]["command"] != want || hs[0]["timeout"] != int64(10) || hs[0]["type"] != "command" {
+		t.Errorf("SessionStart hooks = %v, want %q", hs, want)
+	}
+	for e := range hooks {
+		if e != "SessionStart" && e != "state" {
+			t.Errorf("unexpected %s hook", e)
+		}
 	}
 }
 

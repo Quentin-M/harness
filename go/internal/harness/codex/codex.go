@@ -62,10 +62,8 @@ func (H) Sync(ctx *harness.Ctx) error {
 		cfg.Features = map[string]any{}
 	}
 	cfg.Features["hooks"] = true
-	hooks := map[string]any{}
-	for e, g := range claude.MemoryHooks(ctx, "codex") {
-		hooks[e] = g
-	}
+	mem := memoryHook(ctx.State)
+	hooks := map[string]any{"SessionStart": []claude.HookGroup{{Hooks: []claude.Hook{mem}}}}
 	st := map[string]any{}
 	if oh, ok := old["hooks"].(map[string]any); ok {
 		if o, ok := oh["state"].(map[string]any); ok {
@@ -74,7 +72,7 @@ func (H) Sync(ctx *harness.Ctx) error {
 	}
 	// harness installs these hooks itself; recording their trust keeps fresh codex seats off codex's
 	// startup hook-review prompt, which blocks an unattended seat
-	owned, err := ownedHooks(d, hooks)
+	owned, err := ownedHooks(d, mem)
 	if err != nil {
 		return err
 	}
@@ -86,9 +84,7 @@ func (H) Sync(ctx *harness.Ctx) error {
 		s["trusted_hash"] = h
 		st[k] = s
 	}
-	if len(st) > 0 {
-		hooks["state"] = st
-	}
+	hooks["state"] = st
 	cfg.Hooks = hooks
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
@@ -127,24 +123,26 @@ var eventKeys = map[string]string{
 	"SubagentStop": "subagent_stop", "Stop": "stop", "Interrupt": "interrupt",
 }
 
-// ownedHooks maps codex hook-state keys to trust hashes for the memory hooks in config.toml and the
-// herdr hooks in hooks.json that run harness' own herdr script. Any other hook stays for a human to review.
-func ownedHooks(d string, memory map[string]any) (map[string]string, error) {
+// memoryHook injects the project's Claude auto memory index at session start.
+func memoryHook(state string) claude.Hook {
+	return claude.Hook{Type: "command", Command: shellQuote(filepath.Join(state, "bin", "harness")) + " memory context", Timeout: 10}
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+// ownedHooks maps codex hook-state keys to trust hashes for the memory hook harness writes as the
+// only SessionStart hook in config.toml, and the herdr hooks in hooks.json that run harness' own
+// herdr script. Any other hook stays for a human to review.
+func ownedHooks(d string, memory claude.Hook) (map[string]string, error) {
 	out := map[string]string{}
 	add := func(src, event string, gi, hi int, h claude.Hook) {
 		if ev, ok := eventKeys[event]; ok {
 			out[fmt.Sprintf("%s:%s:%d:%d", filepath.Join(d, src), ev, gi, hi)] = hookHash(ev, h)
 		}
 	}
-	for event, g := range memory {
-		for gi, grp := range g.([]claude.HookGroup) {
-			for hi, h := range grp.Hooks {
-				if grp.Matcher == "" {
-					add("config.toml", event, gi, hi, h)
-				}
-			}
-		}
-	}
+	add("config.toml", "SessionStart", 0, 0, memory)
 	b, err := os.ReadFile(filepath.Join(d, "hooks.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return out, nil

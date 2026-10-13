@@ -36,8 +36,7 @@ func (H) Env(ctx *harness.Ctx) error {
 	// the workspace specs root holds workflows/; the library root below holds agents/ and rigs/
 	ctx.Env["OPENRIG_WORKSPACE_SPECS_ROOT"] = ctx.Root
 	ctx.Env["OPENRIG_NO_KERNEL"] = "1" // the kernel auto-boots its own claude-code operator seats
-	// The daemon's codex activity hooks land after harness' memory hooks but record trust for group 0,
-	// overwriting the memory hooks' trust; harness sync rewrites config.toml without its block anyway.
+	// harness sync rewrites config.toml on every launch, dropping the daemon's codex activity hooks block
 	ctx.Env["OPENRIG_RUNTIME_CODEX_HOOKS_ENABLED"] = "false"
 	// seats reach rig itself and `harness lease` (the launcher binary main.sh builds into state/bin)
 	ctx.Env["PATH"] = filepath.Join(dir(ctx.State), "npm/node_modules/.bin") + string(os.PathListSeparator) +

@@ -34,7 +34,7 @@ func gateway() *model.Config {
 	}}
 }
 
-// fixture builds one layer, a bin dir with claude and bun, and a Ctx for the given models.
+// fixture builds one layer, a bin dir with claude, and a Ctx for the given models.
 func fixture(t *testing.T, m *model.Config) *harness.Ctx {
 	t.Helper()
 	tmp := t.TempDir()
@@ -43,7 +43,7 @@ func fixture(t *testing.T, m *model.Config) *harness.Ctx {
 	write(t, filepath.Join(h, "styles", "i-have-adhd.md"), "---\nname: i-have-adhd\n---\nSTYLE-BODY\n", 0o644)
 	write(t, filepath.Join(h, "skills", "trace", "SKILL.md"), "---\nname: trace\n---\nx\n", 0o644)
 	bins := filepath.Join(tmp, "bin")
-	for _, b := range []string{"claude", "bun"} {
+	for _, b := range []string{"claude"} {
 		write(t, filepath.Join(bins, b), "#!/bin/sh\necho real\n", 0o755)
 	}
 	home := filepath.Join(tmp, "home")
@@ -78,7 +78,7 @@ func TestSyncGateway(t *testing.T) {
 	}
 	s := settingsOf(t, ctx)
 	for k, want := range map[string]any{"model": "big[1m]", "apiKeyHelper": "gw-key", "outputStyle": "i-have-adhd",
-		"tui": "fullscreen", "skipDangerousModePermissionPrompt": true, "autoMemoryEnabled": false} {
+		"tui": "fullscreen", "skipDangerousModePermissionPrompt": true, "autoMemoryEnabled": true} {
 		if s[k] != want {
 			t.Errorf("%s = %v, want %v", k, s[k], want)
 		}
@@ -100,27 +100,16 @@ func TestSyncGateway(t *testing.T) {
 	if !strings.Contains(h0["command"].(string), "herdr-agent-state.sh") || h0["timeout"] != 10.0 {
 		t.Errorf("herdr hook = %v", h0)
 	}
-	cmd := filepath.Join(filepath.Dir(ctx.State), "bin", "bun") + " " + filepath.Join(ctx.State, "memory", "hook.ts") + " claude"
-	mem := start[1].(map[string]any)
-	if _, ok := mem["matcher"]; ok {
-		t.Errorf("memory group has a matcher: %v", mem)
+	if len(start) != 1 {
+		t.Errorf("SessionStart groups = %v, want herdr only", start)
 	}
-	want := map[string]any{"type": "command", "command": cmd, "timeout": 30.0, "async": true}
-	if got := mem["hooks"].([]any)[0].(map[string]any); !equal(got, want) {
-		t.Errorf("SessionStart memory = %v, want %v", got, want)
-	}
-	delete(want, "async")
-	if got := hooks["UserPromptSubmit"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any); !equal(got, want) {
-		t.Errorf("UserPromptSubmit = %v, want %v", got, want)
-	}
-	if got := hooks["Stop"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any); got["async"] != nil {
-		t.Errorf("Stop = %v", got)
+	for _, e := range []string{"UserPromptSubmit", "Stop", "SessionEnd"} {
+		if _, ok := hooks[e]; ok {
+			t.Errorf("%s hook registered: %v", e, hooks[e])
+		}
 	}
 	raw, _ := os.ReadFile(filepath.Join(ctx.State, "claude", "settings.json"))
 	text := string(raw)
-	if i, j, k := strings.Index(text, `"SessionStart"`), strings.Index(text, `"UserPromptSubmit"`), strings.Index(text, `"Stop"`); !(i < j && j < k) {
-		t.Errorf("hook events out of order:\n%s", text)
-	}
 	if !strings.HasSuffix(text, "}\n") || !strings.Contains(text, "\n  \"model\"") {
 		t.Errorf("settings.json not 2-space indented with trailing newline")
 	}
@@ -189,18 +178,6 @@ func TestSyncRejectsCorruptSettings(t *testing.T) {
 	}
 }
 
-func TestNoMemoryHooksWithoutBun(t *testing.T) {
-	ctx := fixture(t, gateway())
-	ctx.Env["HARNESS_BUN_BIN"] = filepath.Join(ctx.Cwd, "no-bun")
-	if err := (H{}).Sync(ctx); err != nil {
-		t.Fatal(err)
-	}
-	hooks := settingsOf(t, ctx)["hooks"].(map[string]any)
-	if len(hooks) != 1 || len(hooks["SessionStart"].([]any)) != 1 {
-		t.Errorf("hooks = %v", hooks)
-	}
-}
-
 func TestEnv(t *testing.T) {
 	for name, m := range map[string]*model.Config{"gateway": gateway(), "none": {Raw: map[string]any{}}} {
 		t.Run(name, func(t *testing.T) {
@@ -243,14 +220,6 @@ func TestArgv(t *testing.T) {
 	got, _ = (H{}).Argv(ctx, "literal-id", nil)
 	if want := []string{bin, "--model", "literal-id", "--dangerously-skip-permissions"}; !slices.Equal(got, want) {
 		t.Errorf("argv = %v, want %v", got, want)
-	}
-}
-
-func TestShellQuote(t *testing.T) {
-	for in, want := range map[string]string{"": "''", "/a/b-c_1.ts": "/a/b-c_1.ts", "a b": "'a b'", "it's": `'it'"'"'s'`} {
-		if got := ShellQuote(in); got != want {
-			t.Errorf("ShellQuote(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 
