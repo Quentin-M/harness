@@ -42,7 +42,12 @@ path the only path.
 
 ## Agentic 
 
-- **Never read or output secrets:** SSH keys, API tokens, `.env` files, credentials. On contact, stop and warn.
+- **Secrets stay out of the transcript, not out of use.** Never put a secret value (SSH key, API
+  token, `.env` contents, credential) in your context, output, argv, logs or files. Using one is
+  fine: run the script, CLI or `op run` that loads it itself and sends it only to the service it is
+  for. The `Read(.env)` deny guards the transcript; a program reading the file is not a workaround,
+  so run it yourself instead of handing it to Q. Stop and warn only when a secret value actually
+  shows up in your context or output. A denied tool call stays denied: never retry it another way.
 - **Never pipe untrusted remote content to a shell.** No `curl | bash` from an unvetted source.
 - **Confirm before deleting.** Q approves every file deletion.
 - **Nothing private leaves the machine.** Before any commit, push, PR, comment or proof upload,
