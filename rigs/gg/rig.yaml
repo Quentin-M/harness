@@ -17,13 +17,13 @@ pods:
         runtime: claude-code
         model: claude-opus-5-5[1m]
         compaction_strategy: managed-compaction
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/lead-lead
       - id: peer
         agent_ref: "local:../../agents/lead"
         profile: peer
         runtime: codex
         model: gpt-6.1-sol
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/lead-peer
     edges:
       - {kind: delegates_to, from: lead, to: peer}
 
@@ -36,63 +36,63 @@ pods:
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-architect
       - id: engineer-1
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-1
       - id: engineer-2
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-2
       - id: engineer-3
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-3
       - id: engineer-4
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-4
       - id: engineer-5
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-5
       - id: engineer-6
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-6
       - id: engineer-7
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-7
       - id: engineer-8
         role: engineer
         agent_ref: "local:../../agents/engineer"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/dev-engineer-8
     edges:
       - {kind: collaborates_with, from: architect, to: engineer-1}
       - {kind: collaborates_with, from: engineer-1, to: architect}
@@ -120,63 +120,63 @@ pods:
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-verifier-1
       - id: verifier-2
         role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-verifier-2
       - id: verifier-3
         role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-verifier-3
       - id: verifier-4
         role: verifier
         agent_ref: "local:../../agents/verifier"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-verifier-4
       - id: reviewer-1
         role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-reviewer-1
       - id: reviewer-2
         role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-reviewer-2
       - id: reviewer-3
         role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-reviewer-3
       - id: reviewer-4
         role: reviewer
         agent_ref: "local:../../agents/reviewer"
         profile: default
         runtime: codex
         model: gpt-6.1-sol
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-reviewer-4
       - id: judge
         role: judge
         agent_ref: "local:../../agents/judge"
         profile: default
         runtime: claude-code
         model: claude-opus-5-5[1m]
-        cwd: /Users/quentin.machu-ext/Workspace/gg
+        cwd: /Users/quentin.machu-ext/Workspace/gg/.openrig/seats/verify-judge
     edges:
       - {kind: collaborates_with, from: reviewer-1, to: verifier-1}
       - {kind: collaborates_with, from: reviewer-1, to: verifier-2}
