@@ -5,7 +5,11 @@
 //	claude fresh            (inside a rig seat: relaunch this seat with a blank context)
 //	claude lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>
 //	claude diagrams <file.md>...   (lint box-drawing diagrams; exit 1 on any issue)
+//	claude memory path [dir]       (the project's shared memory dir) | memory context (SessionStart hook)
+//	claude dream [--project DIR] [--since DURATION] [--dry-run]   (distil recent sessions into memory)
+//	claude dream guard <dir>       (the dream's PreToolUse hook: exit 2 on a tool call outside dir)
 //
+// Every launch but opencode starts a detached `dream` once the last one is over 20h old.
 // Default harness: $HARNESS_DEFAULT, else claude. opencode runs vanilla, no generated config.
 package main
 
@@ -13,7 +17,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,8 +30,9 @@ import (
 	"time"
 
 	"github.com/Quentin-M/harness/internal/diagram"
+	"github.com/Quentin-M/harness/internal/dream"
 	"github.com/Quentin-M/harness/internal/harness"
-	_ "github.com/Quentin-M/harness/internal/harness/claude"
+	"github.com/Quentin-M/harness/internal/harness/claude"
 	_ "github.com/Quentin-M/harness/internal/harness/codex"
 	_ "github.com/Quentin-M/harness/internal/harness/omp"
 	_ "github.com/Quentin-M/harness/internal/harness/opencode"
@@ -62,7 +69,7 @@ func main() {
 type args struct {
 	harness, model string
 	rest           []string
-	cmd            string // sync, doctor, lease, fresh, diagrams or "" for a launch
+	cmd            string // sync, doctor, lease, fresh, diagrams, memory, dream or "" for a launch
 }
 
 func parse(argv []string, env sys.Env) args {
@@ -92,7 +99,7 @@ func parse(argv []string, env sys.Env) args {
 		}
 	}
 	a.rest = argv[i:]
-	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh", "diagrams"}, a.rest[0]) {
+	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh", "diagrams", "memory", "dream"}, a.rest[0]) {
 		a.cmd = a.rest[0]
 	}
 	return a
@@ -108,6 +115,10 @@ func run(argv []string) error {
 		return fresh(env)
 	case "diagrams":
 		return diagrams(a.rest[1:])
+	case "memory":
+		return memoryCmd(env, a.rest[1:])
+	case "dream":
+		return dreamCmd(env, a.rest[1:])
 	}
 	root, err := harnessRoot(env)
 	if err != nil {
@@ -148,14 +159,6 @@ func launch(ctx *harness.Ctx, a args) error {
 	if err := h.Sync(ctx); err != nil {
 		return err
 	}
-	if a.harness != "opencode" {
-		// claude and codex hooks and omp/rig seats all read this bank, so every harness but opencode needs it
-		if !ctx.DryRun {
-			if err := memory.Ensure(ctx.State, ctx.Sys, ctx.Env); err != nil {
-				return err
-			}
-		}
-	}
 	argv, err := h.Argv(ctx, a.model, a.rest)
 	if err != nil {
 		return err
@@ -163,6 +166,12 @@ func launch(ctx *harness.Ctx, a args) error {
 	if ctx.DryRun {
 		fmt.Println(string(dryRun(argv, ctx.Env)))
 		return nil
+	}
+	if a.harness != "opencode" && ctx.Sys.Env.Get("HARNESS_DREAM") != "1" {
+		if exe, err := os.Executable(); err == nil {
+			gate := &lease.Store{Dir: leaseDir(ctx.Sys.Env), TTL: dream.SpawnGap, Now: time.Now}
+			_ = dream.Spawn(ctx.State, exe, ctx.Sys.Env.Environ(), gate) // a dream never holds up a launch
+		}
 	}
 	return syscall.Exec(argv[0], argv, ctx.Env.Environ())
 }
@@ -202,11 +211,7 @@ func leaseCmd(env sys.Env, argv []string) error {
 		}
 		ttl = d
 	}
-	dir := env.Get("OPENRIG_HOME")
-	if dir == "" {
-		dir = filepath.Join(stateDir(env), "rig")
-	}
-	s := &lease.Store{Dir: filepath.Join(dir, "leases"), TTL: ttl, Now: time.Now}
+	s := &lease.Store{Dir: leaseDir(env), TTL: ttl, Now: time.Now}
 	usage := errors.New("usage: lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>")
 	if len(argv) == 0 {
 		return usage
@@ -235,6 +240,119 @@ func leaseCmd(env sys.Env, argv []string) error {
 		return err
 	}
 	return usage
+}
+
+func leaseDir(env sys.Env) string {
+	dir := env.Get("OPENRIG_HOME")
+	if dir == "" {
+		dir = filepath.Join(stateDir(env), "rig")
+	}
+	return filepath.Join(dir, "leases")
+}
+
+func memoryCmd(env sys.Env, argv []string) error {
+	usage := errors.New("usage: memory path [dir] | memory context")
+	if len(argv) == 0 {
+		return usage
+	}
+	switch argv[0] {
+	case "path":
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("memory path: %w", err)
+		}
+		return memory.PathCmd(stateDir(env), argv[1:], cwd, os.Stdout)
+	case "context":
+		// a failing SessionStart hook would block the session; report and let it start
+		if err := memory.ContextHook(stateDir(env), os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "harness:", err)
+		}
+		return nil
+	}
+	return usage
+}
+
+// dreamCmd runs claude the way an interactive launch does (config dir, gateway, auth) on the fast
+// role. It needs no HARNESS_ROOT: the launch that spawned it already synced the claude config.
+func dreamCmd(env sys.Env, argv []string) error {
+	if len(argv) == 2 && argv[0] == "guard" {
+		if err := dream.Guard(argv[1], os.Stdin); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2) // claude's PreToolUse protocol: exit 2 blocks the call and shows stderr
+		}
+		return nil
+	}
+	fs := flag.NewFlagSet("dream", flag.ContinueOnError)
+	project := fs.String("project", "", "dream only the project holding `dir`, now, ignoring stamps")
+	since := fs.Duration("since", 0, "dream sessions from this long ago instead of since the last dream")
+	dryRun := fs.Bool("dry-run", false, "list projects and prompt sizes without calling claude")
+	if err := fs.Parse(argv); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("dream: unexpected argument %q", fs.Arg(0))
+	}
+	timeout := 10 * time.Minute
+	if v := env.Get("HARNESS_DREAM_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("HARNESS_DREAM_TIMEOUT: %w", err)
+		}
+		timeout = d
+	}
+	ctx := &harness.Ctx{State: stateDir(env), Env: env.Clone(), Sys: sys.New(env)}
+	for k := range ctx.Env {
+		if strings.HasPrefix(k, "HERDR_") {
+			delete(ctx.Env, k) // the herdr hook would report the dream as the launching pane's agent
+		}
+	}
+	var err error
+	if ctx.Models, err = model.Load(env); err != nil {
+		return err
+	}
+	if err := (claude.H{}).Env(ctx); err != nil {
+		return err
+	}
+	bin := ctx.Sys.FindBin("claude")
+	if bin == "" && !*dryRun {
+		return errors.New("dream: claude not found on PATH")
+	}
+	if *project != "" {
+		if *project, err = filepath.Abs(*project); err != nil {
+			return fmt.Errorf("dream --project: %w", err)
+		}
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("dream: %w", err)
+	}
+	logw, closeLog, err := dreamLog(ctx.State)
+	if err != nil {
+		return err
+	}
+	defer closeLog()
+	r := &dream.Runner{State: ctx.State, Claude: bin, Self: self, Model: ctx.Models.ResolveFlag("claude", "fast"), Env: ctx.Env,
+		Lease: &lease.Store{Dir: leaseDir(env), TTL: timeout + 5*time.Minute, Now: time.Now}, Timeout: timeout,
+		Now: time.Now, Log: logw, Out: os.Stdout}
+	return r.Run(dream.Options{Project: *project, Since: *since, DryRun: *dryRun})
+}
+
+// dreamLog writes to stderr and the dream log; a spawned dream's stderr already is the log.
+func dreamLog(state string) (io.Writer, func(), error) {
+	path := dream.LogPath(state)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, nil, fmt.Errorf("dream log: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, nil, fmt.Errorf("dream log: %w", err)
+	}
+	fi, err1 := f.Stat()
+	si, err2 := os.Stderr.Stat()
+	if err1 == nil && err2 == nil && os.SameFile(fi, si) {
+		return os.Stderr, func() { f.Close() }, nil
+	}
+	return io.MultiWriter(os.Stderr, f), func() { f.Close() }, nil
 }
 
 // fresh relaunches the calling seat with a blank context. `rig seat launch --stop` kills the seat's
@@ -355,12 +473,10 @@ func doctor(ctx *harness.Ctx) {
 	for i, d := range ctx.Layers.Dirs {
 		rows = append(rows, [2]string{fmt.Sprintf("layer %d", i+1), d})
 	}
-	for _, b := range []string{"omp", "claude", "codex", "bun"} {
+	for _, b := range []string{"omp", "claude", "codex"} {
 		rows = append(rows, [2]string{"bin " + b, or(s.FindBin(b), "MISSING")})
 	}
 	rows = append(rows, [2]string{"bin opencode", or(s.FindBin("opencode"), "-")})
-	rows = append(rows, [2]string{"memory", fmt.Sprintf("%s (mnemopi %s, omp %s)", filepath.Join(ctx.State, "memory/mnemopi.db"),
-		or(memory.Installed(ctx.State), "not installed"), or(memory.OmpVersion(s), "none"))})
 	rig := filepath.Join(ctx.State, "rig/npm/node_modules/.bin/rig")
 	if _, err := os.Stat(rig); err != nil {
 		rig = "not installed (first `claude --rig` installs @openrig/cli)"
@@ -380,7 +496,7 @@ func doctor(ctx *harness.Ctx) {
 	fmt.Println("  rig: claude-code and codex seats keep the real HOME and read the generated CLAUDE_CONFIG_DIR and CODEX_HOME.")
 	fmt.Println("  claude: managed settings in /Library/Application Support/ClaudeCode win over generated settings.json.")
 	fmt.Println("  codex: also reads ~/.agents/skills (no CODEX_HOME-relative override).")
-	fmt.Println("  codex: approve the memory hooks once with /hooks; codex skips untrusted hooks.")
+	fmt.Println("  memory: launches spawn `harness dream` once the last is over 20h old, at most hourly; log in " + dream.LogPath(ctx.State) + ".")
 }
 
 func or(v, def string) string {

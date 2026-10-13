@@ -8,9 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
-	"strings"
 
 	"github.com/Quentin-M/harness/internal/fsx"
 	"github.com/Quentin-M/harness/internal/harness"
@@ -34,7 +32,7 @@ type settings struct {
 	OutputStyle  string              `json:"outputStyle"`
 	TUI          string              `json:"tui"`
 	SkipPrompt   bool                `json:"skipDangerousModePermissionPrompt"`
-	AutoMemory   bool                `json:"autoMemoryEnabled"` // mnemopi is the one memory, shared with codex, omp and rig
+	AutoMemory   bool                `json:"autoMemoryEnabled"`
 	Permissions  map[string][]string `json:"permissions"`
 	Attribution  attribution         `json:"attribution"` // empty strings drop the Co-Authored-By and PR footer
 	Hooks        orderedHooks        `json:"hooks"`
@@ -53,17 +51,12 @@ func (H) Sync(ctx *harness.Ctx) error {
 		Matcher: "^(startup|resume|clear|compact|fork)$",
 		Hooks:   []Hook{{Type: "command", Command: herdrHook, Timeout: 10}},
 	}}}}
-	mem := MemoryHooks(ctx, "claude")
-	for _, e := range memoryEvents {
-		if groups, ok := mem[e.name]; ok {
-			hooks = hooks.add(e.name, groups)
-		}
-	}
 	s := settings{
 		Model:        Model(m),
 		OutputStyle:  Style,
 		TUI:          "fullscreen",
 		SkipPrompt:   true,
+		AutoMemory:   true,
 		APIKeyHelper: m.KeyCmd,
 		Permissions: map[string][]string{"allow": {
 			"Bash(git push --force-with-lease *)", "Bash(git push --force-with-lease=*)"}},
@@ -151,16 +144,6 @@ type event struct {
 // orderedHooks keeps events in insertion order in settings.json, like the Python launcher.
 type orderedHooks []event
 
-func (o orderedHooks) add(name string, groups []HookGroup) orderedHooks {
-	for i := range o {
-		if o[i].name == name {
-			o[i].groups = append(o[i].groups, groups...)
-			return o
-		}
-	}
-	return append(o, event{name, groups})
-}
-
 func (o orderedHooks) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
@@ -195,26 +178,6 @@ type HookGroup struct {
 	Hooks   []Hook `json:"hooks" toml:"hooks"`
 }
 
-// memoryEvents maps hook event -> async. claude and codex reach omp's mnemopi bank through memory/hook.ts.
-var memoryEvents = []struct {
-	name  string
-	async bool
-}{{"SessionStart", true}, {"UserPromptSubmit", false}, {"Stop", false}} // sync: an async Stop hook dies with `claude -p` before the turn is retained
-
-// MemoryHooks returns hook groups per event; empty when bun is missing (memory then stays omp-only).
-func MemoryHooks(ctx *harness.Ctx, h string) map[string][]HookGroup {
-	bun := ctx.Sys.FindBin("bun")
-	if bun == "" || !executable(bun) {
-		return map[string][]HookGroup{}
-	}
-	cmd := ShellQuote(bun) + " " + ShellQuote(filepath.Join(ctx.State, "memory", "hook.ts")) + " " + h
-	out := map[string][]HookGroup{}
-	for _, e := range memoryEvents {
-		out[e.name] = []HookGroup{{Hooks: []Hook{{Type: "command", Command: cmd, Timeout: 30, Async: e.async}}}}
-	}
-	return out
-}
-
 // HerdrInstall installs herdr's agent-state hooks into the state dir instead of $HOME.
 // file is the hook path herdr writes, relative to the state dir.
 func HerdrInstall(ctx *harness.Ctx, h, file string) error {
@@ -237,19 +200,6 @@ func HerdrInstall(ctx *harness.Ctx, h, file string) error {
 	return nil
 }
 
-var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
-
-// ShellQuote matches Python's shlex.quote.
-func ShellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	if shellSafe.MatchString(s) {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
-}
-
 func num(v any) float64 {
 	switch x := v.(type) {
 	case int:
@@ -262,9 +212,4 @@ func num(v any) float64 {
 		return x
 	}
 	return 0
-}
-
-func executable(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
 }

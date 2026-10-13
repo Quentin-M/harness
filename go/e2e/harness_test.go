@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -115,7 +116,7 @@ func newFixture(t *testing.T) *fixture {
 	for _, d := range []string{bins, shims, home} {
 		must(t, os.MkdirAll(d, 0o755))
 	}
-	for _, name := range []string{"omp", "claude", "codex", "opencode", "bun"} {
+	for _, name := range []string{"omp", "claude", "codex", "opencode"} {
 		write(t, filepath.Join(bins, name), "#!/bin/sh\necho real\n")
 		write(t, filepath.Join(shims, name), fmt.Sprintf("#!/bin/sh\nexec harness --%s \"$@\"\n", name))
 	}
@@ -551,22 +552,43 @@ func TestSuperprojectLayer(t *testing.T) {
 	inOrder(t, read(t, f.p("claude/CLAUDE.md")), "# BASE", "# SUPER", "# EXTRA", "RULE-A", "RULE-SUPER", "RULE-EXTRA")
 }
 
-func TestMemoryHooksClaudeAndCodex(t *testing.T) {
+func TestMemoryIsClaudeAutoMemory(t *testing.T) {
 	f := newFixture(t)
 	f.run("sync")
-	bun := filepath.Join(f.tmp, "bin/bun")
-	cmd := func(h string) string { return bun + " " + f.p("memory/hook.ts") + " " + h }
 	cl := readJSON(t, f.p("claude/settings.json"))
-	eq(t, cl["autoMemoryEnabled"], false, "autoMemoryEnabled")
-	eq(t, get(cl, "hooks", "SessionStart", 1, "hooks"), []any{map[string]any{"type": "command", "command": cmd("claude"),
-		"timeout": float64(30), "async": true}}, "SessionStart memory hook")
-	eq(t, get(cl, "hooks", "UserPromptSubmit", 0, "hooks", 0), map[string]any{"type": "command", "command": cmd("claude"),
-		"timeout": float64(30)}, "UserPromptSubmit hook")
-	eq(t, get(cl, "hooks", "Stop", 0, "hooks", 0, "async"), nil, "Stop sync")
+	eq(t, cl["autoMemoryEnabled"], true, "autoMemoryEnabled")
+	for _, e := range []string{"UserPromptSubmit", "Stop", "SessionEnd"} {
+		if get(cl, "hooks", e) != nil {
+			t.Errorf("claude %s hook registered", e)
+		}
+	}
+	eq(t, len(get(cl, "hooks", "SessionStart").([]any)), 1, "claude SessionStart groups")
 	cx := readTOML(t, f.p("codex/config.toml"))
-	eq(t, get(cx, "features", "hooks"), true, "features.hooks")
-	for _, e := range []string{"SessionStart", "UserPromptSubmit", "Stop"} {
-		eq(t, get(cx, "hooks", e, 0, "hooks", 0, "command"), cmd("codex"), "codex "+e)
+	cmd := "'" + f.p("bin/harness") + "' memory context"
+	eq(t, get(cx, "hooks", "SessionStart", 0, "hooks", 0, "command"), cmd, "codex memory hook")
+	eq(t, get(cx, "hooks", "SessionStart", 1), nil, "codex SessionStart groups")
+	for e := range get(cx, "hooks").(map[string]any) {
+		if e != "SessionStart" && e != "state" {
+			t.Errorf("codex %s hook registered", e)
+		}
+	}
+	key := f.p("codex/config.toml") + ":session_start:0:0"
+	if h, _ := get(cx, "hooks", "state", key, "trusted_hash").(string); len(h) != len("sha256:")+64 {
+		t.Errorf("codex memory hook untrusted: %v", get(cx, "hooks", "state"))
+	}
+	cfg := readYAML(t, f.p("omp/agent/config.yml"))
+	eq(t, cfg["memory"], map[string]any{"backend": "off"}, "omp memory")
+	if cfg["mnemopi"] != nil {
+		t.Error("omp mnemopi block written")
+	}
+	for _, h := range []string{"--claude", "--codex", "--omp"} {
+		g := newFixture(t)
+		if out := g.runEnv(map[string]string{"HARNESS_DRY_RUN": "0", "HARNESS_DREAM": "1"}, h); strings.TrimSpace(out) != "real" {
+			t.Fatalf("%s did not exec the harness: %q", h, out)
+		}
+		if _, err := os.Stat(g.p("memory")); err == nil {
+			t.Errorf("%s created a memory dir", h)
+		}
 	}
 }
 
@@ -578,30 +600,6 @@ func TestCodexHookTrustSurvivesRegeneration(t *testing.T) {
 	f.run("sync")
 	cx := readTOML(t, cfg)
 	eq(t, get(cx, "hooks", "state", "x:session_start:0:0", "trusted_hash"), "sha256:abc", "trust kept")
-	if get(cx, "hooks", "UserPromptSubmit") == nil {
-		t.Error("UserPromptSubmit hook missing")
-	}
-}
-
-func TestNoMemoryHooksWithoutBun(t *testing.T) {
-	f := newFixture(t)
-	f.runEnv(map[string]string{"HARNESS_BUN_BIN": filepath.Join(f.tmp, "no-bun")}, "sync")
-	hooks := readJSON(t, f.p("claude/settings.json"))["hooks"].(map[string]any)
-	eq(t, len(hooks), 1, "hook events")
-	eq(t, len(hooks["SessionStart"].([]any)), 1, "SessionStart groups")
-	if _, ok := readTOML(t, f.p("codex/config.toml"))["hooks"]; ok {
-		t.Error("codex hooks without bun")
-	}
-}
-
-func TestOmpUsesTheMemoryBank(t *testing.T) {
-	f := newFixture(t)
-	f.run("sync")
-	wantMem := map[string]any{"backend": "mnemopi"}
-	wantMn := map[string]any{"scoping": "global", "dbPath": f.p("memory/mnemopi.db")}
-	cfg := readYAML(t, f.p("omp/agent/config.yml"))
-	eq(t, cfg["memory"], wantMem, "omp memory")
-	eq(t, cfg["mnemopi"], wantMn, "omp mnemopi")
 }
 
 func TestOpencodeRunsVanilla(t *testing.T) {
@@ -636,21 +634,6 @@ func TestHarnessDefaultPicksHarness(t *testing.T) {
 	eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "hello"}, "argv")
 	eq(t, envVal(out, "PI_CODING_AGENT_DIR"), f.p("omp/agent"), "omp env")
 	eq(t, f.launchEnv(map[string]string{"HARNESS_DEFAULT": "omp"}, "--claude").Argv[0], filepath.Join(f.tmp, "bin/claude"), "flag wins")
-}
-
-func TestEveryLaunchInstallsTheMemoryHook(t *testing.T) {
-	for _, h := range []string{"--claude", "--codex", "--omp"} {
-		f := newFixture(t)
-		if out := f.runEnv(map[string]string{"HARNESS_DRY_RUN": "0"}, h); strings.TrimSpace(out) != "real" {
-			t.Fatalf("%s did not exec the harness: %q", h, out)
-		}
-		contains(t, read(t, f.p("memory/hook.ts")), "harness memory hook", h+" hook.ts")
-	}
-	f := newFixture(t)
-	f.runEnv(map[string]string{"HARNESS_DRY_RUN": "0"}, "--opencode")
-	if _, err := os.Stat(f.p("memory")); err == nil {
-		t.Fatal("opencode runs vanilla: no memory dir")
-	}
 }
 
 func TestLeaseCapsHeavyRunsAcrossProcesses(t *testing.T) {
@@ -746,5 +729,155 @@ func TestDiagramsLintsFilesAndFailsOnIssues(t *testing.T) {
 	inOrder(t, string(out), bad+":4:3: ┬ has an open down arm", bad+":5:4: │ reaches up into ─")
 	if _, err := exec.Command(harnessBin, "diagrams", filepath.Join(f.tmp, "missing.md")).Output(); err == nil {
 		t.Error("missing file succeeded")
+	}
+}
+
+// claudeKey is Claude's project dir name for a short ASCII path.
+func claudeKey(p string) string {
+	return regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(p, "-")
+}
+
+// dreamFixture's claude records the cwd of each headless (-p) call, and is "real" otherwise.
+func dreamFixture(t *testing.T) (*fixture, string) {
+	f := newFixture(t)
+	calls := filepath.Join(f.tmp, "dream-calls")
+	write(t, filepath.Join(f.tmp, "bin", "claude"), "#!/bin/sh\n"+
+		"if [ \"$1\" = -p ]; then cat > /dev/null; echo \"$PWD\" >> "+calls+"; echo 'added    x: y'; exit 0; fi\necho real\n")
+	must(t, os.Chmod(filepath.Join(f.tmp, "bin", "claude"), 0o755))
+	proj := filepath.Join(f.tmp, "proj")
+	must(t, os.MkdirAll(proj, 0o755))
+	rec, _ := json.Marshal(map[string]any{"type": "user", "sessionId": "s1", "cwd": proj,
+		"timestamp": time.Now().Add(-time.Hour).Format(time.RFC3339Nano),
+		"message":   map[string]any{"role": "user", "content": "always use make up"}})
+	write(t, f.p("claude/projects/"+claudeKey(proj)+"/s1.jsonl"), string(rec)+"\n")
+	return f, calls
+}
+
+// waitFor polls until cond holds or 10s pass.
+func waitFor(cond func() bool) bool {
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if cond() {
+			return true
+		}
+	}
+	return cond()
+}
+
+func TestStaleDreamSpawnsOnceAndLaunchDoesNotWait(t *testing.T) {
+	f, calls := dreamFixture(t)
+	real := map[string]string{"HARNESS_DRY_RUN": "0"}
+	start := time.Now()
+	for _, h := range []string{"--claude", "--codex", "--omp"} {
+		eq(t, strings.TrimSpace(f.runEnv(real, h)), "real", h+" execs")
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("three launches took %s", d)
+	}
+	if !waitFor(func() bool { return strings.Contains(read(t, f.p("dream/dream.log")), "dream done") }) {
+		t.Fatalf("dream never finished: %s", read(t, f.p("dream/dream.log")))
+	}
+	got := strings.Fields(read(t, calls))
+	want := filepath.Join(f.p("claude/projects"), claudeKey(filepath.Join(f.tmp, "proj")), "memory")
+	eq(t, got, []string{want}, "dream calls across three launches")
+	if !exists(f.p("dream/last")) {
+		t.Error("last not stamped")
+	}
+	reports, _ := filepath.Glob(f.p("dream/*/*.md"))
+	if len(reports) != 1 || !strings.Contains(read(t, reports[0]), "added    x: y") {
+		t.Errorf("reports = %v", reports)
+	}
+}
+
+func TestNoDreamSpawn(t *testing.T) {
+	for name, c := range map[string]struct {
+		env  map[string]string
+		args []string
+		last bool
+	}{
+		"fresh stamp":    {map[string]string{"HARNESS_DRY_RUN": "0"}, []string{"--claude"}, true},
+		"inside a dream": {map[string]string{"HARNESS_DRY_RUN": "0", "HARNESS_DREAM": "1"}, []string{"--claude"}, false},
+		"opencode":       {map[string]string{"HARNESS_DRY_RUN": "0"}, []string{"--opencode"}, false},
+		"dry run":        {nil, []string{"--claude"}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, calls := dreamFixture(t)
+			if c.last {
+				write(t, f.p("dream/last"), time.Now().UTC().Format(time.RFC3339Nano)+"\n")
+			}
+			f.runEnv(c.env, c.args...)
+			time.Sleep(500 * time.Millisecond)
+			if exists(f.p("dream/dream.log")) || exists(calls) {
+				t.Error("a dream was spawned")
+			}
+		})
+	}
+}
+
+func TestMemoryCLIWithoutRoot(t *testing.T) {
+	f := newFixture(t)
+	proj := filepath.Join(f.tmp, "proj")
+	must(t, os.MkdirAll(filepath.Join(proj, "sub"), 0o755))
+	git(t, proj, "init", "-q")
+	memdir := f.p("claude/projects/" + claudeKey(proj) + "/memory")
+	run := func(dir, stdin string, args ...string) (string, string, error) {
+		cmd := exec.Command(harnessBin, args...)
+		cmd.Dir, cmd.Env = dir, []string{"HOME=" + f.home, "HARNESS_STATE=" + f.state, "PATH=/usr/bin:/bin"}
+		cmd.Stdin = strings.NewReader(stdin)
+		var out, errb strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		err := cmd.Run()
+		return out.String(), errb.String(), err
+	}
+	out, _, err := run(filepath.Join(proj, "sub"), "", "memory", "path")
+	must(t, err)
+	eq(t, out, memdir+"\n", "memory path from a subdir")
+	out, _, err = run(f.tmp, "", "memory", "path", "proj/sub")
+	must(t, err)
+	eq(t, out, memdir+"\n", "memory path for a relative dir")
+
+	payload, _ := json.Marshal(map[string]any{"cwd": proj, "hook_event_name": "SessionStart"})
+	out, _, err = run(f.tmp, string(payload), "memory", "context")
+	must(t, err)
+	eq(t, out, "", "empty memory injects nothing")
+	write(t, filepath.Join(memdir, "MEMORY.md"), "- [Make](make.md) - always use make up\n")
+	out, _, err = run(f.tmp, string(payload), "memory", "context")
+	must(t, err)
+	var hook map[string]any
+	must(t, json.Unmarshal([]byte(out), &hook))
+	ctx, _ := get(hook, "hookSpecificOutput", "additionalContext").(string)
+	contains(t, ctx, "- [Make](make.md) - always use make up", "injected index")
+	contains(t, ctx, memdir, "injected dir")
+
+	out, stderr, err := run(f.tmp, "not json", "memory", "context")
+	if err != nil || out != "" || !strings.Contains(stderr, "hook payload") {
+		t.Errorf("bad payload: err %v, out %q, stderr %q; want exit 0 with the error on stderr", err, out, stderr)
+	}
+	if _, _, err := run(f.tmp, "", "memory", "bogus"); err == nil {
+		t.Error("memory bogus succeeded")
+	}
+}
+
+func TestDreamGuardExitCodes(t *testing.T) {
+	dir := "/st/claude/projects/k/memory"
+	for payload, want := range map[string]int{
+		`{"tool_name":"Write","tool_input":{"file_path":"/st/claude/projects/k/memory/a.md"}}`: 0,
+		`{"tool_name":"Write","tool_input":{"file_path":"/tmp/a.md"}}`:                         2,
+		`garbage`: 2,
+	} {
+		cmd := exec.Command(harnessBin, "dream", "guard", dir)
+		cmd.Env, cmd.Stdin = []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}, strings.NewReader(payload)
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+		code := 0
+		if err := cmd.Run(); err != nil {
+			var ee *exec.ExitError
+			if !errors.As(err, &ee) {
+				t.Fatal(err)
+			}
+			code = ee.ExitCode()
+		}
+		if code != want || want == 2 && !strings.Contains(stderr.String(), "dream guard") {
+			t.Errorf("guard %s: exit %d stderr %q, want exit %d", payload, code, stderr.String(), want)
+		}
 	}
 }

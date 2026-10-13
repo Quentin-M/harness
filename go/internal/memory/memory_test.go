@@ -1,105 +1,230 @@
 package memory
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/Quentin-M/harness/internal/sys"
 )
 
-func write(t *testing.T, path, text string, mode os.FileMode) {
+func git(t *testing.T, cwd string, args ...string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(text), mode); err != nil {
-		t.Fatal(err)
+	full := append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "-C", cwd}, args...)
+	cmd := exec.Command("git", full...)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1"}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 
-// fixture: a HOME holding a legacy bank and fastembed cache, fake omp and bun.
-func fixture(t *testing.T) (state string, s *sys.Sys, log string) {
+func tmp(t *testing.T) string {
 	t.Helper()
-	tmp := t.TempDir()
-	state, home, bins := filepath.Join(tmp, "state"), filepath.Join(tmp, "home"), filepath.Join(tmp, "bin")
-	log = filepath.Join(tmp, "bun.log")
-	write(t, filepath.Join(home, ".omp/agent/memories/mnemopi/mnemopi.db"), "LEGACY", 0o644)
-	write(t, filepath.Join(home, ".omp/cache/fastembed/fast-bge/model.onnx"), "ONNX", 0o644)
-	write(t, filepath.Join(home, ".omp/cache/fastembed/other/x"), "x", 0o644)
-	write(t, filepath.Join(bins, "omp"), "#!/bin/sh\necho 'omp/14.2.1 darwin'\n", 0o755)
-	write(t, filepath.Join(bins, "bun"), "#!/bin/sh\necho \"$@\" >> "+log+"\n", 0o755)
-	// no sqlite3 on PATH: the plain-copy path is exercised deterministically
-	env := sys.Env{"PATH": bins, "HOME": home}
-	return state, &sys.Sys{Env: env, Home: home}, log
-}
-
-func TestOmpVersion(t *testing.T) {
-	_, s, _ := fixture(t)
-	if v := OmpVersion(s); v != "14.2.1" {
-		t.Errorf("version = %q", v)
-	}
-}
-
-func TestEnsure(t *testing.T) {
-	state, s, log := fixture(t)
-	if err := Ensure(state, s, s.Env); err != nil {
+	d, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(state, "memory/hook.ts")); !strings.Contains(string(b), "harness memory hook") {
-		t.Errorf("hook = %q", b)
-	}
-	if b, _ := os.ReadFile(filepath.Join(state, "memory/mnemopi.db")); string(b) != "LEGACY" {
-		t.Errorf("db = %q", b)
-	}
-	if b, _ := os.ReadFile(filepath.Join(state, "omp/cache/fastembed/fast-bge/model.onnx")); string(b) != "ONNX" {
-		t.Errorf("cache = %q", b)
-	}
-	if _, err := os.Stat(filepath.Join(state, "omp/cache/fastembed/other")); !os.IsNotExist(err) {
-		t.Error("non fast-* cache copied")
-	}
-	b, _ := os.ReadFile(log)
-	if want := "add --cwd " + filepath.Join(state, "memory") + " @oh-my-pi/pi-mnemopi@14.2.1\n"; string(b) != want {
-		t.Errorf("bun = %q, want %q", b, want)
-	}
+	return d
+}
 
-	// an existing bank is never overwritten; a pinned library skips bun
-	write(t, filepath.Join(state, "memory/mnemopi.db"), "MINE", 0o644)
-	write(t, filepath.Join(state, "memory/node_modules/@oh-my-pi/pi-mnemopi/package.json"), `{"version":"14.2.1"}`, 0o644)
-	os.Remove(log)
-	if err := Ensure(state, s, s.Env); err != nil {
+// repo is a main checkout with a subdir and a linked worktree, named with dots and underscores.
+func repo(t *testing.T) (base, main, wt string) {
+	t.Helper()
+	base = tmp(t)
+	main, wt = filepath.Join(base, "my_repo.v2"), filepath.Join(base, "wt.feature_x")
+	if err := os.MkdirAll(filepath.Join(main, "sub", "dir"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(state, "memory/mnemopi.db")); string(b) != "MINE" {
-		t.Errorf("db overwritten: %q", b)
+	git(t, main, "init", "-q")
+	git(t, main, "commit", "-q", "--allow-empty", "-m", "x")
+	git(t, main, "worktree", "add", "-q", wt, "-b", "feat")
+	return base, main, wt
+}
+
+func TestRoot(t *testing.T) {
+	base, main, wt := repo(t)
+	plain := filepath.Join(base, "plain")
+	if err := os.Mkdir(plain, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(log); !os.IsNotExist(err) {
-		t.Error("bun ran with the library pinned")
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(wt, link); err != nil {
+		t.Fatal(err)
 	}
-	if Installed(state) != "14.2.1" {
-		t.Errorf("installed = %q", Installed(state))
+	for _, c := range []struct{ cwd, want string }{
+		{main, main},
+		{filepath.Join(main, "sub", "dir"), main},
+		{wt, main},
+		{link, main},
+		{plain, plain},
+	} {
+		if got := Root(c.cwd); got != c.want {
+			t.Errorf("Root(%s) = %q, want %q", c.cwd, got, c.want)
+		}
 	}
 }
 
-func TestBackupWithSqlite(t *testing.T) {
-	_, s, _ := fixture(t)
-	sqlite := "/usr/bin/sqlite3"
-	if _, err := os.Stat(sqlite); err != nil {
-		t.Skip("no sqlite3")
-	}
-	tmp := t.TempDir()
-	src, dst := filepath.Join(tmp, "src.db"), filepath.Join(tmp, "out", "dst.db")
-	s.Env["PATH"] = "/usr/bin"
-	if out, err := exec.Command(sqlite, src, "create table m(v); insert into m values('kept');").CombinedOutput(); err != nil {
-		t.Fatal(err, string(out))
-	}
-	if err := backup(s, src, dst); err != nil {
+func TestRootForeignGitFile(t *testing.T) {
+	base := tmp(t)
+	d := filepath.Join(base, "fake")
+	if err := os.MkdirAll(filepath.Join(base, "other", ".git", "worktrees", "fake"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(sqlite, dst, "select v from m").Output()
-	if err != nil || strings.TrimSpace(string(out)) != "kept" {
-		t.Errorf("backup = %q %v", out, err)
+	if err := os.Mkdir(d, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(base, "other", ".git", "worktrees", "fake")
+	for f, s := range map[string]string{
+		filepath.Join(d, ".git"):       "gitdir: " + wt + "\n",
+		filepath.Join(wt, "commondir"): "../..\n",
+		filepath.Join(wt, "gitdir"):    filepath.Join(base, "elsewhere", ".git") + "\n",
+	} {
+		if err := os.WriteFile(f, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Root(d); got != d {
+		t.Errorf("Root = %q, want %q: a worktree whose gitdir does not point back stays its own root", got, d)
+	}
+}
+
+// Expected keys come from claude 2.1.284: short ones from a live `claude -p` run printing its auto
+// memory dir, long ones from its key function run under node.
+func TestKey(t *testing.T) {
+	for _, c := range []struct{ root, want string }{
+		{"/Users/jane.doe/Workspace/gg", "-Users-jane-doe-Workspace-gg"},
+		{"/private/tmp/memprobe.IiYM/my_repo.v2", "-private-tmp-memprobe-IiYM-my-repo-v2"},
+		{"/tmp/a😀b", "-tmp-a--b"},
+		{"/Users/q/" + strings.Repeat("deep_dir.x/", 20), "-Users-q-" + strings.Repeat("deep-dir-x-", 17) + "deep-n08018"},
+		{"/" + strings.Repeat("a", 219), "-" + strings.Repeat("a", 199) + "-y46xwy"},
+		{"/tmp/café/" + strings.Repeat("é", 200), "-tmp-caf-" + strings.Repeat("-", 192) + "oeb72x"},
+	} {
+		if got := Key(c.root); got != c.want {
+			t.Errorf("Key(%q) = %q, want %q", c.root, got, c.want)
+		}
+	}
+}
+
+func TestDir(t *testing.T) {
+	_, main, wt := repo(t)
+	want := filepath.Join("/st", "claude", "projects", Key(main), "memory")
+	for _, cwd := range []string{main, wt, filepath.Join(main, "sub")} {
+		if got := Dir("/st", cwd); got != want {
+			t.Errorf("Dir(%s) = %q, want %q", cwd, got, want)
+		}
+	}
+	if !strings.Contains(want, "my-repo-v2") {
+		t.Errorf("Dir = %q, want the main checkout's key", want)
+	}
+}
+
+func writeIndex(t *testing.T, dir, s string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIndex(t *testing.T) {
+	d := tmp(t)
+	if got, err := Index(d); err != nil || got != "" {
+		t.Fatalf("missing index = %q, %v", got, err)
+	}
+	writeIndex(t, d, "\n- [A](a.md) - alpha\n- [B](b.md) - beta\n\n")
+	if got, err := Index(d); err != nil || got != "- [A](a.md) - alpha\n- [B](b.md) - beta" {
+		t.Errorf("small index = %q, %v", got, err)
+	}
+
+	var lines []string
+	for i := range 250 {
+		lines = append(lines, fmt.Sprintf("- [M%d](m%d.md) - hook", i, i))
+	}
+	writeIndex(t, d, strings.Join(lines, "\n"))
+	got, err := Index(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, warn, _ := strings.Cut(got, "\n\n> WARNING: ")
+	if n := len(strings.Split(body, "\n")); n != 200 || !strings.HasSuffix(body, "- [M199](m199.md) - hook") {
+		t.Errorf("line cap kept %d lines, ends %q", n, body[len(body)-30:])
+	}
+	if !strings.HasPrefix(warn, "MEMORY.md is 250 lines (limit: 200)") {
+		t.Errorf("line warning = %q", warn)
+	}
+
+	line := "- [X](x.md) - " + strings.Repeat("y", 186) // 200 bytes
+	writeIndex(t, d, strings.TrimSuffix(strings.Repeat(line+"\n", 150), "\n"))
+	got, _ = Index(d)
+	body, warn, _ = strings.Cut(got, "\n\n> WARNING: ")
+	if len(body) > indexBytes || len(body) < indexBytes-len(line) || !strings.HasSuffix(body, line) {
+		t.Errorf("byte cap kept %d bytes", len(body))
+	}
+	if !strings.HasPrefix(warn, "MEMORY.md is 30149 bytes (limit: 25000)") {
+		t.Errorf("byte warning = %q", warn)
+	}
+}
+
+func TestPathCmd(t *testing.T) {
+	_, main, wt := repo(t)
+	var out bytes.Buffer
+	if err := PathCmd("/st", nil, wt, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := Dir("/st", main) + "\n"; out.String() != want {
+		t.Errorf("path = %q, want %q", out.String(), want)
+	}
+	out.Reset()
+	if err := PathCmd("/st", []string{"sub/dir"}, main, &out); err != nil || out.String() != Dir("/st", main)+"\n" {
+		t.Errorf("path sub/dir = %q, %v", out.String(), err)
+	}
+	if err := PathCmd("/st", []string{"a", "b"}, main, &out); err == nil {
+		t.Error("two args accepted")
+	}
+}
+
+func TestContextHook(t *testing.T) {
+	_, main, wt := repo(t)
+	state := tmp(t)
+	payload := func(cwd string) *strings.Reader {
+		b, _ := json.Marshal(map[string]any{"cwd": cwd, "hook_event_name": "SessionStart", "source": "startup"})
+		return strings.NewReader(string(b))
+	}
+	var out bytes.Buffer
+	if err := ContextHook(state, payload(wt), &out); err != nil || out.Len() != 0 {
+		t.Fatalf("empty memory printed %q, %v", out.String(), err)
+	}
+
+	dir := Dir(state, main)
+	writeIndex(t, dir, "- [Prefers Go](prefers-go.md) - user writes Go by default <b>\n")
+	if err := ContextHook(state, payload(wt), &out); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		HookSpecificOutput struct {
+			HookEventName     string `json:"hookEventName"`
+			AdditionalContext string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output %q: %v", out.String(), err)
+	}
+	ctx := got.HookSpecificOutput.AdditionalContext
+	if got.HookSpecificOutput.HookEventName != "SessionStart" ||
+		!strings.HasPrefix(ctx, "<memories>\n") || !strings.HasSuffix(ctx, "\n</memories>") ||
+		!strings.Contains(ctx, "Memory directory: "+dir+"\n") ||
+		!strings.Contains(ctx, "- [Prefers Go](prefers-go.md) - user writes Go by default <b>") {
+		t.Errorf("output = %s", out.String())
+	}
+
+	for _, bad := range []string{"", "{", `{"cwd": 3}`, `{"cwd": "rel/dir"}`} {
+		if err := ContextHook(state, strings.NewReader(bad), &out); err == nil {
+			t.Errorf("payload %q accepted", bad)
+		}
 	}
 }
