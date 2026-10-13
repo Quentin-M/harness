@@ -9,6 +9,8 @@ Always-on floor for any text a human reads: chat, code comments, commit messages
 - **Omit needless words.** Active voice, positive form, one idea per sentence.
 - **Cut filler.** No "basically", "actually", "in order to", "it's worth noting", "at the end of the day".
 - **Be specific.** "Latency dropped 200ms → 40ms", not "performance improved significantly".
+- **No AI attribution.** Commits, PRs, issues and comments carry no `Co-Authored-By: Claude`, no
+  `Generated with Claude Code` line, no model name. This holds when repo history has them.
 
 ## Write the final state
 
