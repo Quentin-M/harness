@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -145,7 +147,117 @@ func (H) Argv(ctx *harness.Ctx, mdl string, args []string) ([]string, error) {
 	if mdl != "" {
 		argv = append(argv, "--model", ctx.Models.ResolveFlag("omp", mdl))
 	}
-	return append(argv, args...), nil
+	rest, err := resumeBare(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	return append(argv, rest...), nil
+}
+
+// resumeBare points `--resume <id>` at the session file in bare omp's ~/.omp/agent when the
+// harness store has no session with that id prefix: herdr restores and bare omp write there.
+// An explicit --profile or --session-dir picks its own store, so those launches pass through.
+func resumeBare(ctx *harness.Ctx, args []string) ([]string, error) {
+	at, id := -1, ""
+scan:
+	for i, a := range args {
+		switch {
+		case a == "--":
+			break scan
+		case a == "--profile" || a == "--session-dir" ||
+			strings.HasPrefix(a, "--profile=") || strings.HasPrefix(a, "--session-dir="):
+			return args, nil
+		case at < 0 && (a == "--resume" || a == "-r") && i+1 < len(args):
+			at, id = i+1, args[i+1]
+		case at < 0 && strings.HasPrefix(a, "--resume="):
+			at, id = i, strings.TrimPrefix(a, "--resume=")
+		}
+	}
+	if xdg := ctx.Env["XDG_DATA_HOME"]; xdg != "" && exists(filepath.Join(xdg, "omp")) {
+		return args, nil // a harness launch keeps omp's default config root, so it shares this store
+	}
+	if at < 0 || !sessionID.MatchString(id) || len(sessionFiles(filepath.Join(AgentDir(ctx.State), "sessions"), id)) > 0 {
+		return args, nil
+	}
+	bareDir := filepath.Join(ctx.Sys.Home, ".omp", "agent")
+	bare := sessionFiles(filepath.Join(bareDir, "sessions"), id)
+	if len(bare) != 1 {
+		return args, nil
+	}
+	if err := linkBlobs(bare[0], filepath.Join(bareDir, "blobs"), filepath.Join(AgentDir(ctx.State), "blobs")); err != nil {
+		return nil, fmt.Errorf("omp: resume %s: %w", bare[0], err)
+	}
+	out := slices.Clone(args)
+	if out[at] = bare[0]; strings.HasPrefix(args[at], "--resume=") {
+		out[at] = "--resume=" + bare[0]
+	}
+	return out, nil
+}
+
+// sessionID is an omp session id or id prefix; anything else (paths, flags) is omp's to resolve.
+var sessionID = regexp.MustCompile(`^[0-9a-fA-F][0-9a-fA-F-]{3,35}$`)
+
+// sessionFiles are the top-level session files under dir whose id starts with prefix.
+func sessionFiles(dir, prefix string) []string {
+	m, _ := filepath.Glob(filepath.Join(dir, "*", "*_"+strings.ToLower(prefix)+"*.jsonl"))
+	return m
+}
+
+var blobRef = regexp.MustCompile(`blob:sha256:([0-9a-f]{64})`)
+
+// linkBlobs hard-links the blobs a session references from src into dst, where omp reads them.
+// Blobs are content-addressed, so an existing name in dst already holds the same bytes.
+func linkBlobs(session, src, dst string) error {
+	data, err := os.ReadFile(session)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, m := range blobRef.FindAllSubmatch(data, -1) {
+		hash := string(m[1])
+		if seen[hash] {
+			continue
+		}
+		seen[hash] = true
+		files, _ := filepath.Glob(filepath.Join(src, hash+"*")) // the blob and its .ext display copy
+		for _, from := range files {
+			to := filepath.Join(dst, filepath.Base(from))
+			if _, err := os.Lstat(to); err == nil {
+				continue
+			}
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				return err
+			}
+			if err := os.Link(from, to); err != nil && !errors.Is(err, os.ErrExist) {
+				if err := copyBlob(from, to); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// copyBlob publishes from at to through a private temp file, so a concurrent resume sees the whole
+// blob or none; a rename over a racing copy replaces it with identical bytes.
+func copyBlob(from, to string) error {
+	b, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(to), ".blob-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), to)
 }
 
 const herdrExt = "extensions/herdr-omp-agent-state.ts"
