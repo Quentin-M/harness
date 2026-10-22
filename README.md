@@ -2,7 +2,8 @@
 
 Q's AI harness: one launcher, one rule set, one pod on OpenRig.
 Generated config lives in a state dir; nothing is written into `~/.claude`, `~/.codex`, `~/.omp`
-or `~/.agents`.
+or `~/.agents`. `claude --omp --resume <id>` also finds sessions bare omp or a herdr restore wrote
+to `~/.omp/agent`.
 
 ```
 harness/
