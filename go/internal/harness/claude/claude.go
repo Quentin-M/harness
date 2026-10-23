@@ -123,6 +123,9 @@ func (H) Argv(ctx *harness.Ctx, m string, args []string) ([]string, error) {
 	if !slices.Contains(args, "--dangerously-skip-permissions") {
 		argv = append(argv, "--dangerously-skip-permissions")
 	}
+	if err := importBare(ctx, args); err != nil {
+		return nil, err
+	}
 	return append(argv, args...), nil
 }
 
