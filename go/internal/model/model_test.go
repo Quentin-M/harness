@@ -15,7 +15,9 @@ models:
   rev: {context: 500000}
   small:
 roles: {default: big, review: rev, fast: small, empty: ""}
-overrides: {codex: {default: rev}}
+overrides:
+  codex: {default: rev}
+  omp: {fast: "small:low", advisor: "big:medium", slow: "big:high"}
 `
 
 func write(t *testing.T, path, text string) {
@@ -97,12 +99,27 @@ func TestEmbeddedCatalog(t *testing.T) {
 	want := map[string]string{"default": "claude-opus-5-5", "review": "gpt-6.1-sol", "fast": "claude-sonnet-5-5",
 		"vision": "gpt-5.6-terra", "tiny": "gpt-5.6-luna"}
 	for role, id := range want {
-		if got := c.RoleModel("omp", role); got != id {
+		if got := c.RoleModel("claude", role); got != id {
 			t.Errorf("%s = %s, want %s", role, got, id)
 		}
 		if c.Attrs(id) == nil {
 			t.Errorf("%s missing from the catalog", id)
 		}
+	}
+	omp := map[string]string{"default": "deepseek-v4.1-flash-1017", "fast": "deepseek-v4.1-flash-1017:low", "tiny": "deepseek-v4.1-flash-1017",
+		"advisor": "claude-opus-5-5:medium", "slow": "claude-opus-5-5:high", "review": "gpt-6.1-sol"}
+	for role, ref := range omp {
+		if got := c.Resolve("omp", role); got != "bitmex/"+ref {
+			t.Errorf("omp %s = %s, want bitmex/%s", role, got, ref)
+		}
+	}
+	for _, h := range []string{"claude", "codex"} {
+		if got := c.RoleModel(h, "advisor"); got != c.RoleModel(h, "default") {
+			t.Errorf("%s advisor = %s, want the %s default", h, got, h)
+		}
+	}
+	if c.Attrs("deepseek-v4.1-flash-1017") == nil || c.Attrs("claude-opus-5-5") == nil {
+		t.Error("omp override ids missing from the catalog")
 	}
 	if c.RoleModel("codex", "default") != "gpt-6.1-sol" || c.Provider() != "bit"+"mex" {
 		t.Error("codex override or provider")
@@ -113,7 +130,9 @@ func TestResolution(t *testing.T) {
 	c := load(t, fixture(t))
 	cases := [][3]string{
 		{"omp", "default", "gw/big"}, {"omp", "review", "gw/rev"}, {"claude", "default", "big"},
-		{"codex", "default", "rev"}, {"omp", "unknown-role", "gw/big"}, {"omp", "empty", "gw/big"},
+		{"codex", "default", "rev"},
+		{"omp", "fast", "gw/small:low"}, {"omp", "advisor", "gw/big:medium"}, {"claude", "advisor", "big"}, {"omp", "slow", "gw/big:high"}, {"claude", "slow", "big"},
+		{"codex", "advisor", "rev"}, {"claude", "fast", "small"}, {"omp", "unknown-role", "gw/big"}, {"omp", "empty", "gw/big"},
 	}
 	for _, cs := range cases {
 		if got := c.Resolve(cs[0], cs[1]); got != cs[2] {
