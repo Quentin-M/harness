@@ -72,8 +72,8 @@ A loop needs a check that can pass or fail; a vague condition spins forever.
 | pstack path | omp | Claude Code | Codex |
 |---|---|---|---|
 | `~/.cursor/rules/pstack-models.mdc` | `## pstack models` in `$PI_CODING_AGENT_DIR/AGENTS.md` | `## pstack models` in `$CLAUDE_CONFIG_DIR/CLAUDE.md` | `## pstack models` in `$CODEX_HOME/AGENTS.md` |
-| `~/.cursor/skills/`, `~/.cursor/plugins/` | `$PI_CODING_AGENT_DIR/skills/` | `$CLAUDE_CONFIG_DIR/skills/` | `$CODEX_HOME/skills/` |
-| `.cursor/skills/<x>/` (project) | `.omp/skills/<x>/` | `.claude/skills/<x>/` | `.agents/skills/<x>/` |
+| `~/.cursor/skills/`, `~/.cursor/plugins/` | `tools/harness/skills/` (linked into `$PI_CODING_AGENT_DIR/skills/`; never write to the generated dir) | `tools/harness/skills/` (linked into `$CLAUDE_CONFIG_DIR/skills/`) | `tools/harness/skills/` (linked into `$CODEX_HOME/skills/`) |
+| `.cursor/skills/<x>/` (project) | `.agents/skills/<x>/` | `.agents/skills/<x>/`, with `.claude/skills` a symlink to `.agents/skills` | `.agents/skills/<x>/` |
 | `~/.cursor/projects/<slug>/agent-transcripts/` | `$PI_CODING_AGENT_DIR/sessions/<encoded-cwd>/*.jsonl`; subagents `history://<id>`, `agent://<id>` | `$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<session>.jsonl`; subagents `<session>/subagents/agent-<id>.jsonl` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (filter by `session_meta.payload.cwd`) |
 | `.cursor/worktrees/<repo>/<x>` | isolation backend dirs; `git worktree list` is the source of truth | `.claude/worktrees/<x>` | `git worktree list` |
 | `.cursor/automations/benny/` | not vendored | not vendored | not vendored |
