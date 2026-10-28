@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Merge K independent reviewer outputs into one ranked report. See ../SKILL.md.
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'USAGE'
+merge <run-dir> [--samples K] [--json | --markdown]
+  reads <run-dir>/sample-*.out (raw reviewer text), writes <run-dir>/merged.json
+  default prints a table; --json prints the report; --markdown prints a PR comment body
+  exit 0 ok, 2 fewer than min(2, K) usable samples
+USAGE
+  exit 64
+}
+
+here=$(cd "$(dirname "$0")" && pwd)
+[[ $# -ge 1 ]] || usage
+dir=$1; shift
+k=; mode=table
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --samples) k=${2:?}; shift 2 ;;
+    --json) mode=json; shift ;;
+    --markdown) mode=markdown; shift ;;
+    *) usage ;;
+  esac
+done
+[[ -d $dir ]] || { echo "no such run dir: $dir" >&2; exit 64; }
+
+shopt -s nullglob
+files=("$dir"/sample-*.out)
+[[ -n $k ]] || k=${#files[@]}
+[[ $k =~ ^[0-9]+$ && $k -ge 1 ]] || { echo "samples must be a positive integer" >&2; exit 64; }
+
+input=$(for ((n = 1; n <= k; n++)); do
+  f=$dir/sample-$n.out
+  jq -Rs --argjson n "$n" '{n: $n, text: .}' < "$f" 2>/dev/null || jq -n --argjson n "$n" '{n: $n, text: ""}'
+done | jq -s --argjson k "$k" '{k: $k, samples: .}')
+
+report=$(jq -f "$here/merge.jq" <<< "$input")
+printf '%s\n' "$report" > "$dir/merged.json"
+
+table() {
+  jq -r '"samples: \(.ok)/\(.k) usable, threshold \(.threshold)/\(.k), happy: \(.happy)",
+    (.failed[] | "failed sample \(.sample): \(.reason)"),
+    (if .dropped_findings > 0 then "dropped \(.dropped_findings) finding(s) missing required fields" else empty end)' <<< "$report"
+  jq -r '. as $r
+    | (["#", "status", "votes", "severity", "location", "title"] | @tsv),
+      (.clusters[] | [.id,
+        (if .confirmed then "confirmed" elif .blocker_singleton then "blocker?" else "maybe" end),
+        "\(.votes)/\($r.k)", .severity, "\(.file):\(.line_start)-\(.line_end)", .title] | @tsv)' <<< "$report" | column -t -s $'\t'
+}
+
+markdown() {
+  jq -r '
+    . as $r
+    | "Sampled review: \($r.ok) of \($r.k) independent reviewers completed, \($r.confirmed) confirmed, \($r.maybe) unconfirmed.",
+      "",
+      (if ($r.clusters | length) == 0 then "No findings." else
+        "| # | Status | Agreement | Severity | Location | Finding |",
+        "|---|---|---|---|---|---|",
+        ($r.clusters[] | "| \(.id) | \(if .confirmed then "confirmed" elif .blocker_singleton then "blocker, single vote" else "unconfirmed" end) | \(.votes)/\($r.k) | \(.severity) | `\(.file):\(.line_start)-\(.line_end)` | \(.title | gsub("\\|"; "/")) |")
+      end)
+  ' <<< "$report"
+}
+
+case $mode in
+  json) printf '%s\n' "$report" ;;
+  markdown) markdown ;;
+  table) table ;;
+esac
+
+[[ $(jq -r .valid <<< "$report") == true ]] || { echo "only $(jq -r .ok <<< "$report")/$k usable samples" >&2; exit 2; }

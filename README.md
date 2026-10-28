@@ -103,6 +103,7 @@ each harness via the `harness-mechanics` skill.
 | `/how` `/why` | code walkthrough, design archaeology |
 | `/architect` `/tdd` `/blast-radius` | shape first, failing test first, what else breaks |
 | `/arena` `/swarm` `/interrogate` | competing attempts, parallel workers, adversarial review |
+| `/review` (omp: `/skill:review`) | K sampled read-only GPT reviewers, vote-merged, fix-or-rebut loop on a PR |
 | `/correct` `/unslop` `/reflect` | encode lessons, cut AI prose, learn from a session |
 
 ## Change the launcher

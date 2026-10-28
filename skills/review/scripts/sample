@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# Run K independent read-only reviewers over one scope and merge their findings. See ../SKILL.md.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+skill=$(dirname "$here")
+
+usage() {
+  cat >&2 <<'USAGE'
+sample (--pr <n|url> | --branch <base> | --worktree) [--samples K] [--stagger SECONDS] [--focus TEXT] [--dry-run]
+  --pr N         review the PR diff fetched with gh, from a detached worktree at the head SHA
+  --branch BASE  three-dot diff BASE...HEAD in the current checkout
+  --worktree     staged + unstaged changes in the current checkout
+  --samples K    independent reviewers, 1-5 (default 3)
+  --stagger S    seconds between reviewer starts (default 8; the credential helper races under a burst)
+  --focus TEXT   extra review emphasis
+  --dry-run      build the scope and prompts, start no reviewer
+env: REVIEW_MODEL overrides the resolved review model; REVIEW_MAX_TIME per reviewer (default 20m)
+prints the merged table; run dir (prompts, raw output, merged.json) is on the first and last line
+USAGE
+  exit 64
+}
+
+scope= ref= k=3 stagger=8 focus= dry=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --pr) scope=pr; ref=${2:?}; shift 2 ;;
+    --branch) scope=branch; ref=${2:?}; shift 2 ;;
+    --worktree) scope=worktree; shift ;;
+    --samples) k=${2:?}; shift 2 ;;
+    --stagger) stagger=${2:?}; shift 2 ;;
+    --focus) focus=${2:?}; shift 2 ;;
+    --dry-run) dry=1; shift ;;
+    *) usage ;;
+  esac
+done
+[[ -n $scope ]] || usage
+[[ $k =~ ^[1-5]$ ]] || { echo "--samples must be 1-5" >&2; exit 64; }
+[[ $stagger =~ ^[0-9]+$ ]] || { echo "--stagger must be whole seconds" >&2; exit 64; }
+
+export PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-$HOME/.local/state/harness/omp/agent}
+
+resolve_model() {
+  local m=${REVIEW_MODEL:-}
+  [[ -n $m ]] || m=$(omp config get modelRoles | jq -er '.review')
+  [[ $m =~ :(off|minimal|low|medium|high|xhigh|max)$ ]] || m=$m:high
+  printf '%s\n' "$m"
+}
+
+filter_noise() {  # drops generated, lock, binary and vendored sections from a unified diff
+  awk '
+    function skip(p) {
+      return p ~ /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|uv\.lock|flake\.lock|go\.sum|Gemfile\.lock|composer\.lock)$/ \
+        || p ~ /\.(lock|min\.js|min\.css|map|snap|png|jpe?g|gif|webp|ico|svg|woff2?|ttf|otf|eot|pdf|zip|tar|gz|tgz|bz2|xz|7z|jar|wasm|pb\.go|pb\.gw\.go)$/ \
+        || p ~ /(^|\/)(__snapshots__|node_modules|vendor|third_party)\// \
+        || p ~ /^(dist|build|out)\// \
+        || p ~ /(^|\/)[^\/]*(\.generated\.|_generated\.|_gen\.)/
+    }
+    /^diff --git / { p = $4; sub(/^b\//, "", p); drop = skip(p); if (drop) print p > "/dev/stderr" }
+    !drop { print }
+  '
+}
+
+cleanup_wt=
+drop_worktree() { [[ -z $cleanup_wt ]] || git worktree remove --force "$cleanup_wt" 2>/dev/null || true; }
+trap drop_worktree EXIT
+run=$(mktemp -d "/tmp/review-run.XXXXXX")
+echo "run dir: $run" >&2
+
+case $scope in
+  pr)
+    meta=$(gh pr view "$ref" --json number,title,body,headRefOid,baseRefName,url)
+    num=$(jq -r .number <<< "$meta"); head=$(jq -r .headRefOid <<< "$meta"); base=$(jq -r .baseRefName <<< "$meta")
+    url=$(jq -r .url <<< "$meta")
+    repo_slug=$(sed -E 's#https://[^/]+/([^/]+/[^/]+)/pull/.*#\1#' <<< "$url")
+    gh pr diff "$num" -R "$repo_slug" > "$run/diff.raw"
+    intent=$(jq -r '"PR #\(.number): \(.title)\n\n\(.body // "")"' <<< "$meta")
+    label="$repo_slug#$num@${head:0:8}"
+    workdir=$run/empty; mkdir -p "$workdir"
+    local_slug=$(git remote get-url origin 2>/dev/null | sed -E 's#(git@[^:]+:|https?://[^/]+/)##; s#\.git$##' || true)
+    if [[ $(tr '[:upper:]' '[:lower:]' <<< "$local_slug") == "$(tr '[:upper:]' '[:lower:]' <<< "$repo_slug")" ]]; then
+      git fetch -q origin "pull/$num/head"
+      git worktree add -q --detach "$run/wt" "$head"
+      workdir=$run/wt; cleanup_wt=$run/wt
+    else
+      echo "cwd is not a checkout of $repo_slug; reviewers see the diff only" >&2
+    fi
+    ;;
+  branch)
+    mb=$(git merge-base "$ref" HEAD)
+    git diff "$mb" HEAD > "$run/diff.raw"
+    intent=$(git log --format='%s%n%b' "$mb..HEAD")
+    label="$(git rev-parse --abbrev-ref HEAD)@$(git rev-parse --short HEAD) vs $ref"
+    workdir=$(git rev-parse --show-toplevel)
+    ;;
+  worktree)
+    git diff HEAD > "$run/diff.raw"
+    untracked=$(git ls-files --others --exclude-standard)
+    intent="Uncommitted changes in the working tree.${untracked:+ Untracked files that belong to the change: $(tr '\n' ' ' <<< "$untracked")}"
+    label="worktree@$(git rev-parse --short HEAD)"
+    workdir=$(git rev-parse --show-toplevel)
+    ;;
+esac
+
+filter_noise < "$run/diff.raw" > "$run/diff.patch" 2> "$run/excluded.txt"
+[[ -s $run/diff.patch ]] || { echo "No reviewable files in scope ($label)" >&2; exit 3; }
+
+max_inline=60000
+{
+  echo "# Review task"
+  echo
+  echo "Scope: $label"
+  echo
+  echo "## Intent"
+  echo
+  echo "$intent"
+  [[ -z $focus ]] || { echo; echo "## Focus"; echo; echo "$focus"; }
+  if [[ -s $run/excluded.txt ]]; then
+    echo; echo "## Excluded from the diff (generated, lock, binary or vendored)"; echo
+    sed 's/^/- /' "$run/excluded.txt"
+  fi
+  echo
+  echo "## Diff"
+  echo
+  if (( $(wc -c < "$run/diff.patch") <= max_inline )); then
+    echo '```diff'; cat "$run/diff.patch"; echo '```'
+  else
+    echo "The diff is large. Read it in sections from \`$run/diff.patch\`."
+  fi
+  echo
+  echo "Your working directory is the repository at the reviewed revision. Emit the JSON object from the output contract."
+} > "$run/task.md"
+
+cat > "$run/omp.yml" <<'YAML'
+advisor:
+  enabled: false
+memory:
+  backend: "off"
+YAML
+
+model=$(resolve_model)
+[[ $dry -eq 0 ]] || { echo "dry run: $run/task.md"; exit 0; }
+echo "reviewers: $k x $model, stagger ${stagger}s, scope $label" >&2
+
+start=$(date +%s)
+pids=()
+for ((n = 1; n <= k; n++)); do
+  (
+    cd "$workdir"
+    omp -p --no-session --mode json --model "$model" \
+      --no-extensions --no-skills --no-lsp --no-title --tools read,grep,glob \
+      --config "$run/omp.yml" --max-time "${REVIEW_MAX_TIME:-20m}" \
+      --append-system-prompt "$skill/references/reviewer-prompt.md" \
+      "@$run/task.md" > "$run/sample-$n.stream" 2> "$run/sample-$n.err" || echo "omp exited $?" >> "$run/sample-$n.err"
+    jq -rs '[.[] | select(.type == "message_end" and .message.role == "assistant")] | last
+            | [.message.content[]? | select(.type == "text") | .text] | join("")' \
+      "$run/sample-$n.stream" > "$run/sample-$n.out" 2>/dev/null || : > "$run/sample-$n.out"
+  ) &
+  pids+=($!)
+  (( n < k )) && sleep "$stagger"
+done
+for p in "${pids[@]}"; do wait "$p" || true; done
+echo "reviewers done in $(( $(date +%s) - start ))s" >&2
+
+for ((n = 1; n <= k; n++)); do
+  [[ -n $(tr -d '[:space:]' < "$run/sample-$n.out") ]] || echo "sample $n produced no output: $(grep -v '^Warning: MCP' "$run/sample-$n.err" | tail -1)" >&2
+done
+
+status=0
+"$here/merge" "$run" --samples "$k" || status=$?
+echo "run dir: $run"
+exit "$status"
