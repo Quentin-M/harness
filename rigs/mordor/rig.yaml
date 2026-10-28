@@ -1,0 +1,360 @@
+version: "0.2"
+name: mordor
+culture_file: CULTURE.md
+permission_policy: builtin:yolo  # claude --dangerously-skip-permissions, codex danger-full-access
+summary: >
+  mordor delivery team. lead pod talks to Q and keeps seats healthy; dev designs and builds; verify
+  reviews, proves and judges. Seats hand off to each other through the queue. Start with
+  rig up rigs/mordor/rig.yaml.
+
+pods:
+  - id: lead
+    label: Lead
+    members:
+      - id: lead
+        agent_ref: "local:../../agents/lead"
+        profile: primary
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        compaction_strategy: managed-compaction
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/lead-lead
+      - id: peer
+        agent_ref: "local:../../agents/lead"
+        profile: peer
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/lead-peer
+    edges:
+      - {kind: delegates_to, from: lead, to: peer}
+
+  - id: dev
+    label: Development
+    members:
+      - id: architect
+        role: architect
+        agent_ref: "local:../../agents/architect"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-architect
+      - id: engineer-1
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-1
+      - id: engineer-2
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-2
+      - id: engineer-3
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-3
+      - id: engineer-4
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-4
+      - id: engineer-5
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-5
+      - id: engineer-6
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-6
+      - id: engineer-7
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-7
+      - id: engineer-8
+        role: engineer
+        agent_ref: "local:../../agents/engineer"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/dev-engineer-8
+    edges:
+      - {kind: collaborates_with, from: architect, to: engineer-1}
+      - {kind: collaborates_with, from: engineer-1, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-2}
+      - {kind: collaborates_with, from: engineer-2, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-3}
+      - {kind: collaborates_with, from: engineer-3, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-4}
+      - {kind: collaborates_with, from: engineer-4, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-5}
+      - {kind: collaborates_with, from: engineer-5, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-6}
+      - {kind: collaborates_with, from: engineer-6, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-7}
+      - {kind: collaborates_with, from: engineer-7, to: architect}
+      - {kind: collaborates_with, from: architect, to: engineer-8}
+      - {kind: collaborates_with, from: engineer-8, to: architect}
+
+  - id: verify
+    label: Verification
+    members:
+      - id: verifier-1
+        role: verifier
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-verifier-1
+      - id: verifier-2
+        role: verifier
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-verifier-2
+      - id: verifier-3
+        role: verifier
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-verifier-3
+      - id: verifier-4
+        role: verifier
+        agent_ref: "local:../../agents/verifier"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-verifier-4
+      - id: reviewer-1
+        role: reviewer
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-reviewer-1
+      - id: reviewer-2
+        role: reviewer
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-reviewer-2
+      - id: reviewer-3
+        role: reviewer
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-reviewer-3
+      - id: reviewer-4
+        role: reviewer
+        agent_ref: "local:../../agents/reviewer"
+        profile: default
+        runtime: codex
+        model: gpt-6.1-sol
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-reviewer-4
+      - id: judge
+        role: judge
+        agent_ref: "local:../../agents/judge"
+        profile: default
+        runtime: claude-code
+        model: claude-opus-5-5[1m]
+        cwd: /Users/quentin.machu-ext/Workspace/mordor/.openrig/seats/verify-judge
+    edges:
+      - {kind: collaborates_with, from: reviewer-1, to: verifier-1}
+      - {kind: collaborates_with, from: reviewer-1, to: verifier-2}
+      - {kind: collaborates_with, from: reviewer-1, to: verifier-3}
+      - {kind: collaborates_with, from: reviewer-1, to: verifier-4}
+      - {kind: collaborates_with, from: reviewer-2, to: verifier-1}
+      - {kind: collaborates_with, from: reviewer-2, to: verifier-2}
+      - {kind: collaborates_with, from: reviewer-2, to: verifier-3}
+      - {kind: collaborates_with, from: reviewer-2, to: verifier-4}
+      - {kind: collaborates_with, from: reviewer-3, to: verifier-1}
+      - {kind: collaborates_with, from: reviewer-3, to: verifier-2}
+      - {kind: collaborates_with, from: reviewer-3, to: verifier-3}
+      - {kind: collaborates_with, from: reviewer-3, to: verifier-4}
+      - {kind: collaborates_with, from: reviewer-4, to: verifier-1}
+      - {kind: collaborates_with, from: reviewer-4, to: verifier-2}
+      - {kind: collaborates_with, from: reviewer-4, to: verifier-3}
+      - {kind: collaborates_with, from: reviewer-4, to: verifier-4}
+      - {kind: collaborates_with, from: verifier-1, to: judge}
+      - {kind: collaborates_with, from: verifier-2, to: judge}
+      - {kind: collaborates_with, from: verifier-3, to: judge}
+      - {kind: collaborates_with, from: verifier-4, to: judge}
+      - {kind: collaborates_with, from: judge, to: reviewer-1}
+      - {kind: collaborates_with, from: judge, to: reviewer-2}
+      - {kind: collaborates_with, from: judge, to: reviewer-3}
+      - {kind: collaborates_with, from: judge, to: reviewer-4}
+      - {kind: collaborates_with, from: judge, to: verifier-1}
+      - {kind: collaborates_with, from: judge, to: verifier-2}
+      - {kind: collaborates_with, from: judge, to: verifier-3}
+      - {kind: collaborates_with, from: judge, to: verifier-4}
+
+edges:
+  # launch order and orchestrator: lead ─▶ peer ─▶ every worker, so a stuck row escalates to the
+  # peer (seat health), never to the lead
+  - {kind: delegates_to, from: lead.peer, to: dev.architect}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-1}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-2}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-3}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-4}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-5}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-6}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-7}
+  - {kind: delegates_to, from: lead.peer, to: dev.engineer-8}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.verifier-4}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-1}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-2}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-3}
+  - {kind: delegates_to, from: lead.peer, to: verify.reviewer-4}
+  - {kind: delegates_to, from: lead.peer, to: verify.judge}
+  # direct handoffs (visible in rig whoami; no queue effect)
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.architect, to: verify.reviewer-4}
+  # engineer hands the head to a reviewer
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-1, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-2, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-3, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-4, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-5, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-6, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-7, to: verify.reviewer-4}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-1}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-2}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-3}
+  - {kind: collaborates_with, from: dev.engineer-8, to: verify.reviewer-4}
+  # reviewers and verifiers send a design problem back to the architect
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.architect}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.architect}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-1, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-2, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-3, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.reviewer-4, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-1, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-2, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-3, to: dev.engineer-8}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-1}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-2}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-3}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-4}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-5}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-6}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-7}
+  - {kind: collaborates_with, from: verify.verifier-4, to: dev.engineer-8}
+  # decisions only Q can make
+  - {kind: escalates_to, from: dev.architect, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-1, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-2, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-3, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-4, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-5, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-6, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-7, to: lead.lead}
+  - {kind: escalates_to, from: dev.engineer-8, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-1, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-2, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-3, to: lead.lead}
+  - {kind: escalates_to, from: verify.verifier-4, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-1, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-2, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-3, to: lead.lead}
+  - {kind: escalates_to, from: verify.reviewer-4, to: lead.lead}
+  - {kind: escalates_to, from: verify.judge, to: lead.lead}

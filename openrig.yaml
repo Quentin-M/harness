@@ -5,3 +5,6 @@ projects:
   - id: gg
     root: ~/workspace/gg/.openrig
     rigs: [gg]
+  - id: mordor
+    root: ~/workspace/mordor/.openrig
+    rigs: [mordor]
