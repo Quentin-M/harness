@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# PR thread helpers for the review loop: read state, reply, resolve. See ../SKILL.md.
+# Bot requesting is opt-in (--with-bot / bot-request / bot-wait); the default flow never touches a bot.
+set -euo pipefail
+
+BOT_REQ=${REVIEW_BOT_REQUEST:-BitMEX-Claude}   # login to request a review from
+BOT_AUTHOR=${REVIEW_BOT_AUTHOR:-bitmex-claude} # review author: REST says <name>[bot], GraphQL <name>
+
+usage() {
+  cat >&2 <<'USAGE'
+threads state <pr> [--with-bot]  JSON: head, ci, mergeable, unresolved threads; --with-bot adds the bot's last review and a bot-based happy
+threads thread <thread-id>       full text of every comment in a thread
+threads reply <thread-id> [--resolve]   reply with stdin as body; --resolve also resolves
+threads resolve <thread-id>      resolve without replying (only for threads already answered)
+threads bot-request <pr>         dismiss the bot's CHANGES_REQUESTED reviews, re-request BitMEX-Claude
+threads bot-wait <pr> [timeout-s]  block until the bot reviews after the last request (default 5400s)
+<pr> is a number (current repo) or a PR URL.
+USAGE
+  exit 64
+}
+
+pr_ref() {  # -> "owner/name number"
+  gh pr view "$1" --json url,number -q '(.url | capture("github.com/(?<r>[^/]+/[^/]+)/pull").r) + " " + (.number|tostring)'
+}
+
+state() {
+  local pr=$1 with_bot=${2:-} repo n; read -r repo n < <(pr_ref "$pr")
+  gh api graphql --paginate --slurp -f owner="${repo%/*}" -f name="${repo#*/}" -F n="$n" -f query='
+query($owner:String!,$name:String!,$n:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
+  url isDraft mergeable headRefOid
+  reviewRequests(first:20){nodes{requestedReviewer{... on User{login} ... on Bot{login}}}}
+  commits(last:1){nodes{commit{statusCheckRollup{state}}}}
+  reviews(last:50){nodes{databaseId author{login} state submittedAt commit{oid} body comments{totalCount}}}
+  reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line
+    opener: comments(first:1){nodes{author{login} body url}} latest: comments(last:1){totalCount nodes{author{login}}}}}
+}}}' | jq --arg bot "$BOT_AUTHOR" --arg req "$BOT_REQ" --arg me "$(gh api user -q .login)" --argjson with_bot "$([[ $with_bot == --with-bot ]] && echo true || echo false)" '
+  def is_bot: ascii_downcase | . == $bot or . == $bot + "[bot]";
+  . as $pages
+  | (.[0].data.repository.pullRequest
+    | .reviewThreads.nodes = ([$pages[].data.repository.pullRequest.reviewThreads.nodes[]])) as $p
+  | ([$p.reviews.nodes[] | select(.author.login | is_bot)] | last) as $r
+  | {
+      url: $p.url, draft: $p.isDraft, mergeable: $p.mergeable, head: $p.headRefOid[0:10],
+      ci: $p.commits.nodes[0].commit.statusCheckRollup.state,
+      unresolved: [$p.reviewThreads.nodes[] | select(.isResolved | not) | {
+        id, path, line, outdated: .isOutdated,
+        author: .opener.nodes[0].author.login,
+        last_author: .latest.nodes[0].author.login,
+        awaiting_me: (.latest.nodes[0].author.login != $me),
+        replies: (.latest.totalCount - 1),
+        url: .opener.nodes[0].url,
+        gist: (.opener.nodes[0].body | split("\n")[0] | .[0:200])
+      }]
+    }
+  | if $with_bot then
+      . + {
+        bot_requested: any($p.reviewRequests.nodes[]; .requestedReviewer.login == $req),
+        last_bot_review: ($r | if . == null then null else {
+          id: .databaseId, state, at: .submittedAt, commit: .commit.oid[0:10],
+          on_head: (.commit.oid == $p.headRefOid),
+          new_inline: .comments.totalCount,
+          findings: ((.body | capture("\\*\\*Findings:\\*\\*\\s*(?<f>[^\\n]*)") | .f) // null),
+          verdict: ((.body | capture("\\*\\*Verdict:\\*\\*\\s*(?<v>[^\\n]*)") | .v) // null)
+        } end)
+      }
+      | .bot_happy = (.last_bot_review != null
+          and .last_bot_review.on_head
+          and .last_bot_review.new_inline == 0
+          and .last_bot_review.state != "CHANGES_REQUESTED"
+          and ((.last_bot_review.findings // "") | sub("\u2014.*"; "") | gsub("\\([^)]*\\)"; "")
+               | [scan("[0-9]+") | tonumber] | length > 0 and all(. == 0))
+          and ([.unresolved[] | select(.author | is_bot)] | length) == 0)
+    else . end'
+}
+
+thread() {
+  gh api graphql -f t="$1" -f query='query($t:ID!){node(id:$t){... on PullRequestReviewThread{
+    path line isResolved comments(first:100){totalCount nodes{author{login} createdAt body}}}}}' \
+    --jq '.data.node | "\(.path):\(.line) resolved=\(.isResolved) comments=\(.comments.totalCount)\n" +
+      ([.comments.nodes[] | "--- \(.author.login) \(.createdAt)\n\(.body)"] | join("\n"))'
+}
+
+resolve() {
+  gh api graphql -f t="$1" -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}' \
+    --jq '.data.resolveReviewThread.thread.isResolved'
+}
+
+reply() {
+  local tid=$1 body url; body=$(cat)
+  [[ -n $body ]] || { echo "empty reply body on stdin" >&2; exit 65; }
+  url=$(gh api graphql -f t="$tid" -f b="$body" -f query='mutation($t:ID!,$b:String!){
+    addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{url}}}' \
+    --jq '.data.addPullRequestReviewThreadReply.comment.url // empty')
+  # Resolve only after the reply is confirmed: a thread must never close unexplained.
+  [[ -n $url ]] || { echo "reply failed on $tid; not resolving" >&2; exit 1; }
+  echo "$url"
+  if [[ ${2:-} == --resolve ]]; then
+    [[ $(resolve "$tid") == true ]] || { echo "replied but resolve failed on $tid" >&2; exit 1; }
+    echo "resolved=true"
+  fi
+}
+
+bot_request() {
+  local repo n head; read -r repo n < <(pr_ref "$1")
+  head=$(gh pr view "$n" -R "$repo" --json headRefOid -q '.headRefOid[0:10]')
+  gh api "repos/$repo/pulls/$n/reviews" --paginate \
+    --jq ".[] | select((.user.login | ascii_downcase | . == \"$BOT_AUTHOR[bot]\" or . == \"$BOT_AUTHOR\") and .state == \"CHANGES_REQUESTED\") | .id" |
+  while read -r id; do
+    gh api -X PUT "repos/$repo/pulls/$n/reviews/$id/dismissals" \
+      -f event=DISMISS -f message="Addressed; re-requesting review on $head." >/dev/null
+    echo "dismissed review $id"
+  done
+  # Removing first forces a fresh request even if GitHub still lists the bot as requested.
+  gh pr edit "$n" -R "$repo" --remove-reviewer "$BOT_REQ" >/dev/null 2>&1 || true
+  gh pr edit "$n" -R "$repo" --add-reviewer "$BOT_REQ" >/dev/null
+  echo "requested $BOT_REQ on $repo#$n at $head"
+}
+
+bot_wait() {
+  local repo n since deadline at; read -r repo n < <(pr_ref "$1")
+  deadline=$(( $(date +%s) + ${2:-5400} ))
+  since=$(gh api "repos/$repo/issues/$n/timeline" --paginate \
+    --jq ".[] | select(.event == \"review_requested\" and .requested_reviewer.login == \"$BOT_REQ\") | .created_at" | tail -1)
+  [[ -n $since ]] || { echo "no review request for $BOT_REQ on $repo#$n; run: threads bot-request" >&2; exit 66; }
+  echo "waiting for $BOT_REQ review on $repo#$n requested at $since" >&2
+  while (( $(date +%s) < deadline )); do
+    at=$(gh api "repos/$repo/pulls/$n/reviews" --paginate \
+      --jq ".[] | select(.user.login | ascii_downcase | . == \"$BOT_AUTHOR[bot]\" or . == \"$BOT_AUTHOR\") | .submitted_at" | sort | tail -1)
+    if [[ -n $at && $at > $since ]]; then state "$1" --with-bot; return 0; fi
+    sleep 60
+  done
+  echo "timed out: no $BOT_REQ review since $since" >&2; exit 2
+}
+
+case ${1:-} in
+  state)       [[ $# -ge 2 ]] || usage; state "$2" "${3:-}" ;;
+  thread)      [[ $# -eq 2 ]] || usage; thread "$2" ;;
+  reply)       [[ $# -ge 2 ]] || usage; reply "$2" "${3:-}" ;;
+  resolve)     [[ $# -eq 2 ]] || usage; resolve "$2" ;;
+  bot-request) [[ $# -eq 2 ]] || usage; bot_request "$2" ;;
+  bot-wait)    [[ $# -ge 2 ]] || usage; bot_wait "$2" "${3:-}" ;;
+  *) usage ;;
+esac
