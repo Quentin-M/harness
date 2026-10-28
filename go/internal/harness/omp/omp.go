@@ -25,9 +25,9 @@ func init() { harness.Register(H{}) }
 
 // Roles maps omp modelRoles keys to models.yaml roles.
 var Roles = [][2]string{
-	{"default", "default"}, {"smol", "fast"}, {"slow", "review"}, {"plan", "default"}, {"task", "default"},
-	{"advisor", "default"}, {"vision", "vision"}, {"image", "vision"}, {"commit", "vision"}, {"tiny", "tiny"},
-	{"memory", "tiny"}, {"review", "review"}, {"fast", "fast"},
+	{"default", "default"}, {"smol", "fast"}, {"slow", "slow"}, {"plan", "default"}, {"task", "default"},
+	{"advisor", "advisor"}, {"vision", "vision"}, {"commit", "fast"}, {"tiny", "tiny"},
+	{"memory", "tiny"}, {"judge", "tiny"}, {"review", "review"}, {"fast", "fast"},
 }
 
 // API maps a models.yaml api to omp's provider api.
@@ -101,16 +101,25 @@ func (H) Sync(ctx *harness.Ctx) error {
 	if err != nil {
 		return err
 	}
-	over := fsx.OMap("modelRoles", fsx.OMap(kv...), "skills", fsx.OMap("enableAgentsUser", false),
-		"memory", fsx.OMap("backend", "off"))
+	have, err := readConfig(filepath.Join(d, "config.yml"))
+	if err != nil {
+		return err
+	}
+	// omp's /settings and `omp config set` write here; keep those edits across relaunches.
+	// omp-base.yml only seeds defaults, the harness-owned keys below always win.
+	cfg := fsx.Merge(fsx.Merge(base, have), fsx.OMap("skills", fsx.OMap("enableAgentsUser", false),
+		"memory", fsx.OMap("backend", "off")))
+	// models.yaml owns the roles: replace them whole so a role the harness dropped doesn't linger.
+	fsx.Put(cfg, "modelRoles", fsx.OMap(kv...))
 	files := []struct {
 		name string
 		data []byte
 	}{
-		{"config.yml", fsx.DumpYAML(fsx.Merge(base, over))},
+		{"config.yml", fsx.DumpYAML(cfg)},
 		{"models.yml", fsx.DumpYAML(fsx.OMap("providers", Providers(ctx.Models)))},
 		{"AGENTS.md", []byte(ctx.Layers.Instructions(ctx.Models, "omp"))},
 		{"APPEND_SYSTEM.md", []byte(StyleBody(ctx))},
+		{"WATCHDOG.yml", Watchdog(ctx.Models)},
 	}
 	for _, f := range files {
 		if err := fsx.Write(filepath.Join(d, f.name), f.data); err != nil {
@@ -118,6 +127,37 @@ func (H) Sync(ctx *harness.Ctx) error {
 		}
 	}
 	return ctx.Layers.LinkSkills(filepath.Join(d, "skills"))
+}
+
+// Watchdog is omp's WATCHDOG.yml: a direction advisor on the advisor model and a strict
+// reviewer on the review model, both resolved from models.yaml so ids never drift.
+func Watchdog(m *model.Config) []byte {
+	return fsx.DumpYAML(fsx.OMap("advisors", []any{
+		fsx.OMap("name", "Advisor", "model", m.Resolve("omp", "advisor"),
+			"instructions", "Steer direction: wrong approach, missed constraints, scope drift, hallucinated APIs.\n"),
+		fsx.OMap("name", "Reviewer", "model", m.Resolve("omp", "review")+":high",
+			"tools", []any{"read", "grep", "glob", "lsp"}, "maxNotesPerUpdate", 3,
+			"instructions", "Review every change the primary makes as a strict code reviewer.\n"+
+				"After each edit/write, read the touched code and check correctness, edge cases,\n"+
+				"repo conventions (CLAUDE.md), missing/weak tests, and unverified claims.\n"+
+				"Raise `blocker` when work is handed off broken, untested, or contradicting the evidence.\n"),
+	}))
+}
+
+// readConfig parses an existing omp config.yml; a missing file is an empty map.
+func readConfig(path string) (map[string]any, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m, err := fsx.ParseYAML(b)
+	if err != nil {
+		return nil, fmt.Errorf("omp/config.yml: %w", err)
+	}
+	return m, nil
 }
 
 func (H) Env(ctx *harness.Ctx) error {

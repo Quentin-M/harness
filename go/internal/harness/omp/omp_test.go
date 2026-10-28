@@ -32,6 +32,8 @@ func gateway() *model.Config {
 			"rev": map[string]any{"context": 500000}, "small": nil},
 		"roles": map[string]any{"default": "big", "review": "rev", "fast": "small", "vision": "rev", "tiny": "small",
 			"extra": "rev"},
+		"overrides": map[string]any{"omp": map[string]any{"advisor": "big:medium", "fast": "small:low",
+			"slow": "big:high"}},
 	}}
 }
 
@@ -77,11 +79,28 @@ func TestSyncGateway(t *testing.T) {
 	}
 	cfg := readYAML(t, filepath.Join(d, "config.yml"))
 	roles := cfg["modelRoles"].(map[string]any)
-	for k, want := range map[string]string{"default": "gw/big", "slow": "gw/rev", "review": "gw/rev",
-		"smol": "gw/small", "memory": "gw/small", "extra": "gw/rev"} {
+	for k, want := range map[string]string{"default": "gw/big", "slow": "gw/big:high", "review": "gw/rev", "commit": "gw/small:low", "vision": "gw/rev",
+		"advisor": "gw/big:medium", "plan": "gw/big", "task": "gw/big",
+		"smol": "gw/small:low", "fast": "gw/small:low", "memory": "gw/small", "judge": "gw/small", "extra": "gw/rev"} {
 		if roles[k] != want {
 			t.Errorf("modelRoles.%s = %v, want %s", k, roles[k], want)
 		}
+	}
+	if _, ok := roles["image"]; ok {
+		t.Errorf("image role points at a chat model: %v", roles["image"])
+	}
+	var wd struct {
+		Advisors []struct {
+			Name, Model string
+			Tools       []string
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(d, "WATCHDOG.yml")); err != nil || yaml.Unmarshal(b, &wd) != nil {
+		t.Fatalf("WATCHDOG.yml: %v", err)
+	}
+	if len(wd.Advisors) != 2 || wd.Advisors[0].Model != "gw/big:medium" || wd.Advisors[1].Model != "gw/rev:high" ||
+		!slices.Equal(wd.Advisors[1].Tools, []string{"read", "grep", "glob", "lsp"}) {
+		t.Errorf("WATCHDOG advisors = %+v", wd.Advisors)
 	}
 	skills := cfg["skills"].(map[string]any)
 	if skills["enableAgentsUser"] != false || cfg["personality"] != "pragmatic" {
@@ -129,6 +148,77 @@ func TestSyncWithoutGatewayHasNoProviders(t *testing.T) {
 	}
 	if r := readYAML(t, filepath.Join(AgentDir(ctx.State), "config.yml"))["modelRoles"].(map[string]any); r["default"] != "gw/big" {
 		t.Errorf("default = %v", r["default"])
+	}
+}
+
+func TestSyncSeedsReviewerRoutingAndRoleTags(t *testing.T) {
+	ctx := fixture(t, gateway())
+	cfgPath := filepath.Join(AgentDir(ctx.State), "config.yml")
+	write(t, cfgPath, "task:\n  agentModelOverrides:\n    custom: '@fast'\nmodelTags:\n  fast:\n    name: Mine\n", 0o644)
+	if err := (H{}).Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cfg := readYAML(t, cfgPath)
+	over := cfg["task"].(map[string]any)["agentModelOverrides"].(map[string]any)
+	for _, agent := range []string{"reviewer", "security-reviewer"} {
+		if over[agent] != "@review" {
+			t.Errorf("agentModelOverrides.%s = %v, want @review", agent, over[agent])
+		}
+	}
+	if over["custom"] != "@fast" {
+		t.Errorf("user override lost: %v", over)
+	}
+	tags := cfg["modelTags"].(map[string]any)
+	if tags["review"].(map[string]any)["name"] != "REVIEW" {
+		t.Errorf("review tag = %v", tags["review"])
+	}
+	for _, role := range []string{"image", "web", "speech", "dictation", "widget", "judge", "memory"} {
+		if tags[role].(map[string]any)["hidden"] != true {
+			t.Errorf("%s not hidden: %v", role, tags[role])
+		}
+	}
+	if tags["fast"].(map[string]any)["name"] != "Mine" || tags["fast"].(map[string]any)["hidden"] != true {
+		t.Errorf("fast tag = %v", tags["fast"])
+	}
+}
+
+func TestEmbeddedCatalogReviewIsTheOnlySolRole(t *testing.T) {
+	ctx := fixture(t, nil)
+	m, err := model.Load(sys.Env{"HARNESS_MANAGED_SETTINGS": t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Models = m
+	if err := (H{}).Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	roles := readYAML(t, filepath.Join(AgentDir(ctx.State), "config.yml"))["modelRoles"].(map[string]any)
+	review := m.Resolve("omp", "review")
+	for role, ref := range roles {
+		if (ref == review) != (role == "review") {
+			t.Errorf("modelRoles.%s = %v, review model is %s", role, ref, review)
+		}
+	}
+}
+
+func TestSyncKeepsUserSettings(t *testing.T) {
+	ctx := fixture(t, gateway())
+	cfgPath := filepath.Join(AgentDir(ctx.State), "config.yml")
+	write(t, cfgPath, "prewalk:\n  enabled: true\ncomposer:\n  tokenRate: true\nmemory:\n  backend: local\n"+
+		"modelRoles:\n  stale: gw/gone\n", 0o644)
+	if err := (H{}).Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cfg := readYAML(t, cfgPath)
+	if get := func(k, sub string) any { return cfg[k].(map[string]any)[sub] }; get("prewalk", "enabled") != true ||
+		get("composer", "tokenRate") != true || get("composer", "shape") != "field" {
+		t.Errorf("user edits or base defaults lost: %v", cfg)
+	}
+	if cfg["memory"].(map[string]any)["backend"] != "off" {
+		t.Errorf("harness-owned memory.backend overridden: %v", cfg["memory"])
+	}
+	if r := cfg["modelRoles"].(map[string]any); r["stale"] != nil || r["default"] != "gw/big" {
+		t.Errorf("modelRoles = %v", r)
 	}
 }
 
