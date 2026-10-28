@@ -5,6 +5,12 @@ setupVersion: 2
 defaultThinkingLevel: auto
 composer:
   shape: field
+  tokenRate: true
+display:
+  collapsedToolTitles: true
+  cacheMissMarker: true
+  showTokenUsage: true
+  showTurnTime: true
 compaction:
   experimentalContextManagement: false
   methodOrder:
@@ -57,9 +63,27 @@ task:
   enableLsp: true
   isolation:
     enabled: false
+  agentAdvisor:
+    task: 'on'
+    sonic: 'on'
+  agentModelOverrides:
+    reviewer: '@review'
+    security-reviewer: '@review'
+tools:
+  outputMaxColumns: 256
 dev:
   autoqaConsent: granted
 read:
   renderMarkdown: true
   summarize:
     prose: true
+modelTags:
+  review: {name: REVIEW}
+  fast: {hidden: true}
+  image: {hidden: true}
+  web: {hidden: true}
+  speech: {hidden: true}
+  dictation: {hidden: true}
+  widget: {hidden: true}
+  judge: {hidden: true}
+  memory: {hidden: true}
