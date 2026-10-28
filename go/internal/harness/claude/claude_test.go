@@ -78,10 +78,14 @@ func TestSyncGateway(t *testing.T) {
 	}
 	s := settingsOf(t, ctx)
 	for k, want := range map[string]any{"model": "big[1m]", "apiKeyHelper": "gw-key", "outputStyle": "i-have-adhd",
-		"tui": "fullscreen", "skipDangerousModePermissionPrompt": true, "autoMemoryEnabled": true} {
+		"tui": "fullscreen", "skipDangerousModePermissionPrompt": true, "autoMemoryEnabled": true,
+		"idleCompaction": true} {
 		if s[k] != want {
 			t.Errorf("%s = %v, want %v", k, s[k], want)
 		}
+	}
+	if env, ok := s["env"].(map[string]any); !ok || env["CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS"] != "100000" {
+		t.Errorf("env = %v, want CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS=100000", s["env"])
 	}
 	if attr, ok := s["attribution"].(map[string]any); !ok || attr["commit"] != "" || attr["pr"] != "" {
 		t.Errorf("attribution = %v, want empty commit and pr", s["attribution"])
