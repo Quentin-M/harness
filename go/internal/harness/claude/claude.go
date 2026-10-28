@@ -37,7 +37,12 @@ type settings struct {
 	Attribution  attribution         `json:"attribution"` // empty strings drop the Co-Authored-By and PR footer
 	Hooks        orderedHooks        `json:"hooks"`
 	APIKeyHelper string              `json:"apiKeyHelper,omitempty"`
+	IdleCompact  bool                `json:"idleCompaction"`
+	Env          map[string]string   `json:"env"`
 }
+
+// IdleCompactMinTokens matches omp's compaction.idleThresholdTokens; claude's default is 200K.
+const IdleCompactMinTokens = "100000"
 
 type attribution struct {
 	Commit string `json:"commit"`
@@ -60,7 +65,9 @@ func (H) Sync(ctx *harness.Ctx) error {
 		APIKeyHelper: m.KeyCmd,
 		Permissions: map[string][]string{"allow": {
 			"Bash(git push --force-with-lease *)", "Bash(git push --force-with-lease=*)"}},
-		Hooks: hooks,
+		Hooks:       hooks,
+		IdleCompact: true,
+		Env:         map[string]string{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS": IdleCompactMinTokens},
 	}
 	path := filepath.Join(d, "settings.json")
 	if err := writeSettings(path, s); err != nil {
