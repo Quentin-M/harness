@@ -106,7 +106,7 @@ func TestEmbeddedCatalog(t *testing.T) {
 			t.Errorf("%s missing from the catalog", id)
 		}
 	}
-	omp := map[string]string{"default": "deepseek-v4.1-flash-1017", "fast": "deepseek-v4.1-flash-1017:low", "tiny": "deepseek-v4.1-flash-1017",
+	omp := map[string]string{"default": "claude-opus-5-5", "fast": "deepseek-v4.1-flash-1017:low", "tiny": "deepseek-v4.1-flash-1017",
 		"advisor": "claude-opus-5-5:medium", "slow": "claude-opus-5-5:high", "review": "gpt-6.1-sol"}
 	for role, ref := range omp {
 		if got := c.Resolve("omp", role); got != "bitmex/"+ref {

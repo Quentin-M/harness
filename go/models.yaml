@@ -31,9 +31,10 @@ roles:
 
 overrides:
   codex: {default: gpt-6.1-sol}
-  # omp spends gpt-6.1-sol on review only; claude and codex fall back to default for slow
+  # omp spends gpt-6.1-sol on review only; claude and codex fall back to default for slow.
+  # deepseek needs 3-5x opus's requests at the same per-request latency, so it backs only the
+  # small roles.
   omp:
-    default: deepseek-v4.1-flash-1017
     fast: deepseek-v4.1-flash-1017:low
     tiny: deepseek-v4.1-flash-1017
     advisor: claude-opus-5-5:medium

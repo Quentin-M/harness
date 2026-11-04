@@ -93,14 +93,25 @@ func TestSyncGateway(t *testing.T) {
 		Advisors []struct {
 			Name, Model string
 			Tools       []string
+			ReviewMode  string `yaml:"reviewMode"`
+			Interval    int    `yaml:"reviewInterval"`
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(d, "WATCHDOG.yml")); err != nil || yaml.Unmarshal(b, &wd) != nil {
 		t.Fatalf("WATCHDOG.yml: %v", err)
 	}
 	if len(wd.Advisors) != 2 || wd.Advisors[0].Model != "gw/big:medium" || wd.Advisors[1].Model != "gw/rev:high" ||
-		!slices.Equal(wd.Advisors[1].Tools, []string{"read", "grep", "glob", "lsp"}) {
+		!slices.Equal(wd.Advisors[1].Tools, []string{"read", "grep", "glob", "lsp"}) ||
+		wd.Advisors[0].ReviewMode != "" || wd.Advisors[0].Interval != 5 || wd.Advisors[1].ReviewMode != "agent-end" {
 		t.Errorf("WATCHDOG advisors = %+v", wd.Advisors)
+	}
+	// Each prompt would otherwise pay an auto-thinking judge call, and a Reviewer concern would reopen a finished run.
+	if cfg["defaultThinkingLevel"] != "medium" || cfg["advisor"].(map[string]any)["continueSeverity"] != "blocker" {
+		t.Errorf("thinking %v, advisor %v", cfg["defaultThinkingLevel"], cfg["advisor"])
+	}
+	// An elided read costs a second read request for the ranges the edit needs.
+	if sum := cfg["read"].(map[string]any)["summarize"].(map[string]any); sum["enabled"] != false || sum["prose"] != false {
+		t.Errorf("read.summarize = %v", sum)
 	}
 	skills := cfg["skills"].(map[string]any)
 	if skills["enableAgentsUser"] != false || cfg["personality"] != "pragmatic" {

@@ -133,12 +133,14 @@ func (H) Sync(ctx *harness.Ctx) error {
 // reviewer on the review model, both resolved from models.yaml so ids never drift.
 func Watchdog(m *model.Config) []byte {
 	return fsx.DumpYAML(fsx.OMap("advisors", []any{
-		fsx.OMap("name", "Advisor", "model", m.Resolve("omp", "advisor"),
+		// Each note costs the primary ~2 requests; every 5th update keeps the steering at a third of the cost.
+		fsx.OMap("name", "Advisor", "model", m.Resolve("omp", "advisor"), "reviewInterval", 5,
 			"instructions", "Steer direction: wrong approach, missed constraints, scope drift, hallucinated APIs.\n"),
-		fsx.OMap("name", "Reviewer", "model", m.Resolve("omp", "review")+":high",
+		// A per-turn review feeds the primary mid-task notes that cost more time than they catch.
+		fsx.OMap("name", "Reviewer", "model", m.Resolve("omp", "review")+":high", "reviewMode", "agent-end",
 			"tools", []any{"read", "grep", "glob", "lsp"}, "maxNotesPerUpdate", 3,
-			"instructions", "Review every change the primary makes as a strict code reviewer.\n"+
-				"After each edit/write, read the touched code and check correctness, edge cases,\n"+
+			"instructions", "Review the primary's changes as a strict code reviewer when it hands off.\n"+
+				"Read the touched code and check correctness, edge cases,\n"+
 				"repo conventions (CLAUDE.md), missing/weak tests, and unverified claims.\n"+
 				"Raise `blocker` when work is handed off broken, untested, or contradicting the evidence.\n"),
 	}))

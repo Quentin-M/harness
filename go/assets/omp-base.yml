@@ -2,7 +2,7 @@ symbolPreset: nerd
 theme:
   dark: dark-catppuccin
 setupVersion: 2
-defaultThinkingLevel: auto
+defaultThinkingLevel: medium
 composer:
   shape: field
   tokenRate: true
@@ -26,6 +26,7 @@ hideThinkingBlock: true
 personality: pragmatic
 advisor:
   enabled: true
+  continueSeverity: blocker
   syncBacklog: 'off'
   immuneTurns: 5
   maxNotesPerUpdate: 1
@@ -76,7 +77,8 @@ dev:
 read:
   renderMarkdown: true
   summarize:
-    prose: true
+    enabled: false
+    prose: false
 modelTags:
   review: {name: REVIEW}
   fast: {hidden: true}
