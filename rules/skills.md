@@ -12,5 +12,3 @@ One copy of every skill. Never install into `~/.claude`, `~/.agents`, `~/.codex`
   upstream and commit (see `skills/PSTACK.md`).
 - **Before adding a skill** check the name does not already exist in `tools/harness/skills/` or the
   project's `.agents/skills/`. A second copy under the same name is a bug, not a variant.
-- **OpenRig** seeds `openrig-skills`, `rigs` and `refocusing` into `~/.claude/skills` and
-  `~/.agents/skills` itself. That is an upstream limitation; leave them there.

@@ -1,9 +1,7 @@
-// claude generates harness config into one state dir, then execs claude, omp, codex, rig or opencode.
+// claude generates harness config into one state dir, then execs claude, omp, codex or opencode.
 //
-//	claude [--claude|--omp|--codex|--rig|--opencode|--oc] [--model ROLE_OR_ID] [harness args...]
+//	claude [--claude|--omp|--codex|--opencode|--oc] [--model ROLE_OR_ID] [harness args...]
 //	claude sync | claude doctor
-//	claude fresh            (inside a rig seat: relaunch this seat with a blank context)
-//	claude lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>
 //	claude diagrams <file.md>...   (lint box-drawing diagrams; exit 1 on any issue)
 //	claude memory path [dir]       (the project's shared memory dir) | memory context (SessionStart hook)
 //	claude dream [--project DIR] [--since DURATION] [--dry-run]   (distil recent sessions into memory)
@@ -21,10 +19,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -36,9 +32,7 @@ import (
 	_ "github.com/Quentin-M/harness/internal/harness/codex"
 	_ "github.com/Quentin-M/harness/internal/harness/omp"
 	_ "github.com/Quentin-M/harness/internal/harness/opencode"
-	_ "github.com/Quentin-M/harness/internal/harness/rig"
 	"github.com/Quentin-M/harness/internal/layer"
-	"github.com/Quentin-M/harness/internal/lease"
 	"github.com/Quentin-M/harness/internal/memory"
 	"github.com/Quentin-M/harness/internal/model"
 	"github.com/Quentin-M/harness/internal/sys"
@@ -46,10 +40,9 @@ import (
 
 // dryRunKeys are the launch env vars a dry run reports, in order.
 var dryRunKeys = []string{"HOME", "PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_FORCE_IMAGE_PROTOCOL", "CLAUDE_CONFIG_DIR",
-	"CODEX_HOME", "OPENRIG_HOME", "OPENRIG_NO_KERNEL", "OPENRIG_RUNTIME_CODEX_HOOKS_ENABLED", "ANTHROPIC_BASE_URL",
-	"ANTHROPIC_AUTH_TOKEN"}
+	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL"}
 
-var harnessFlags = map[string]string{"--claude": "claude", "--omp": "omp", "--codex": "codex", "--rig": "rig",
+var harnessFlags = map[string]string{"--claude": "claude", "--omp": "omp", "--codex": "codex",
 	"--opencode": "opencode", "--oc": "opencode"}
 
 func main() {
@@ -59,9 +52,6 @@ func main() {
 			msg = "harness: " + msg
 		}
 		fmt.Fprintln(os.Stderr, msg)
-		if errors.Is(err, errFull) {
-			os.Exit(75)
-		}
 		os.Exit(1)
 	}
 }
@@ -69,7 +59,7 @@ func main() {
 type args struct {
 	harness, model string
 	rest           []string
-	cmd            string // sync, doctor, lease, fresh, diagrams, memory, dream or "" for a launch
+	cmd            string // sync, doctor, diagrams, memory, dream or "" for a launch
 }
 
 func parse(argv []string, env sys.Env) args {
@@ -82,11 +72,6 @@ func parse(argv []string, env sys.Env) args {
 		arg := argv[i]
 		if h, ok := harnessFlags[arg]; ok {
 			a.harness = h
-			if h == "rig" { // everything after --rig is rig's own argv
-				i++
-				dashdash = true
-				break
-			}
 		} else if arg == "--model" && i+1 < len(argv) {
 			i++
 			a.model = argv[i]
@@ -99,7 +84,7 @@ func parse(argv []string, env sys.Env) args {
 		}
 	}
 	a.rest = argv[i:]
-	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "lease", "fresh", "diagrams", "memory", "dream"}, a.rest[0]) {
+	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "diagrams", "memory", "dream"}, a.rest[0]) {
 		a.cmd = a.rest[0]
 	}
 	return a
@@ -109,10 +94,6 @@ func run(argv []string) error {
 	env := sys.OSEnv()
 	a := parse(argv, env)
 	switch a.cmd {
-	case "lease":
-		return leaseCmd(env, a.rest[1:])
-	case "fresh":
-		return fresh(env)
 	case "diagrams":
 		return diagrams(a.rest[1:])
 	case "memory":
@@ -153,6 +134,11 @@ func launch(ctx *harness.Ctx, a args) error {
 	if !ok {
 		return fmt.Errorf("unknown harness %q", a.harness)
 	}
+	for k, v := range ctx.Models.KeyEnv {
+		if _, ok := ctx.Env.Lookup(k); !ok {
+			ctx.Env.Set(k, v)
+		}
+	}
 	if err := h.Env(ctx); err != nil {
 		return err
 	}
@@ -169,8 +155,7 @@ func launch(ctx *harness.Ctx, a args) error {
 	}
 	if a.harness != "opencode" && ctx.Sys.Env.Get("HARNESS_DREAM") != "1" {
 		if exe, err := os.Executable(); err == nil {
-			gate := &lease.Store{Dir: leaseDir(ctx.Sys.Env), TTL: dream.SpawnGap, Now: time.Now}
-			_ = dream.Spawn(ctx.State, exe, ctx.Sys.Env.Environ(), gate) // a dream never holds up a launch
+			_ = dream.Spawn(ctx.State, exe, ctx.Sys.Env.Environ(), time.Now()) // a dream never holds up a launch
 		}
 	}
 	return syscall.Exec(argv[0], argv, ctx.Env.Environ())
@@ -196,58 +181,6 @@ func diagrams(files []string) error {
 		return fmt.Errorf("diagrams: %d issues", n)
 	}
 	return nil
-}
-
-// errFull exits 75 (EX_TEMPFAIL) so a seat can tell "try the light run" from a real error.
-var errFull = errors.New("full")
-
-// leaseCmd caps concurrent heavy runs on a shared resource; leases live under $OPENRIG_HOME.
-func leaseCmd(env sys.Env, argv []string) error {
-	ttl := 4 * time.Hour
-	if v := env.Get("HARNESS_LEASE_TTL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("HARNESS_LEASE_TTL: %w", err)
-		}
-		ttl = d
-	}
-	s := &lease.Store{Dir: leaseDir(env), TTL: ttl, Now: time.Now}
-	usage := errors.New("usage: lease acquire <resource> <cap> <holder> | release <resource> <holder> | list <resource>")
-	if len(argv) == 0 {
-		return usage
-	}
-	switch {
-	case argv[0] == "acquire" && len(argv) == 4:
-		n, err := strconv.Atoi(argv[2])
-		if err != nil {
-			return fmt.Errorf("lease cap %q: %w", argv[2], err)
-		}
-		ok, err := s.Acquire(argv[1], n, argv[3])
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("lease %s: all %d held: %w", argv[1], n, errFull)
-		}
-		return nil
-	case argv[0] == "release" && len(argv) == 3:
-		return s.Release(argv[1], argv[2])
-	case argv[0] == "list" && len(argv) == 2:
-		ls, err := s.List(argv[1])
-		for _, l := range ls {
-			fmt.Printf("%s\t%s\n", l.Holder, l.Since.Format(time.RFC3339))
-		}
-		return err
-	}
-	return usage
-}
-
-func leaseDir(env sys.Env) string {
-	dir := env.Get("OPENRIG_HOME")
-	if dir == "" {
-		dir = filepath.Join(stateDir(env), "rig")
-	}
-	return filepath.Join(dir, "leases")
 }
 
 func memoryCmd(env sys.Env, argv []string) error {
@@ -332,8 +265,7 @@ func dreamCmd(env sys.Env, argv []string) error {
 	}
 	defer closeLog()
 	r := &dream.Runner{State: ctx.State, Claude: bin, Self: self, Model: ctx.Models.ResolveFlag("claude", "fast"), Env: ctx.Env,
-		Lease: &lease.Store{Dir: leaseDir(env), TTL: timeout + 5*time.Minute, Now: time.Now}, Timeout: timeout,
-		Now: time.Now, Log: logw, Out: os.Stdout}
+		Timeout: timeout, Now: time.Now, Log: logw, Out: os.Stdout}
 	return r.Run(dream.Options{Project: *project, Since: *since, DryRun: *dryRun})
 }
 
@@ -353,37 +285,6 @@ func dreamLog(state string) (io.Writer, func(), error) {
 		return os.Stderr, func() { f.Close() }, nil
 	}
 	return io.MultiWriter(os.Stderr, f), func() { f.Close() }, nil
-}
-
-// fresh relaunches the calling seat with a blank context. `rig seat launch --stop` kills the seat's
-// own pane, so the relaunch runs in a detached session after a delay that lets this turn end.
-func fresh(env sys.Env) error {
-	seat := env.Get("OPENRIG_SESSION_NAME")
-	if seat == "" {
-		return errors.New("fresh: OPENRIG_SESSION_NAME unset; run it inside a rig seat")
-	}
-	delay := 5 * time.Second
-	if v := env.Get("HARNESS_FRESH_DELAY"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return fmt.Errorf("HARNESS_FRESH_DELAY: %w", err)
-		}
-		delay = d
-	}
-	rig := sys.New(env).Which("rig")
-	if rig == "" {
-		return errors.New("fresh: rig not on PATH")
-	}
-	script := fmt.Sprintf("sleep %.3f; exec %q seat launch %q --fresh --stop --reason 'fresh context for the next row'",
-		delay.Seconds(), rig, seat)
-	cmd := exec.Command("/bin/sh", "-c", script)
-	cmd.Env = env.Environ()
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("fresh %s: %w", seat, err)
-	}
-	fmt.Printf("%s relaunches fresh in %s; end your turn now\n", seat, delay)
-	return cmd.Process.Release()
 }
 
 // dryRun is {"argv": [...], "env": {key: value or null}}.
@@ -477,13 +378,7 @@ func doctor(ctx *harness.Ctx) {
 		rows = append(rows, [2]string{"bin " + b, or(s.FindBin(b), "MISSING")})
 	}
 	rows = append(rows, [2]string{"bin opencode", or(s.FindBin("opencode"), "-")})
-	rig := filepath.Join(ctx.State, "rig/npm/node_modules/.bin/rig")
-	if _, err := os.Stat(rig); err != nil {
-		rig = "not installed (first `claude --rig` installs @openrig/cli)"
-	}
 	rows = append(rows,
-		[2]string{"bin rig", rig},
-		[2]string{"bin tmux", or(s.Which("tmux"), "MISSING (rig daemon needs tmux)")},
 		[2]string{"bin herdr", or(s.Which("herdr"), "-")},
 		[2]string{"role default", m.Resolve("omp", "default")},
 		[2]string{"role review", m.Resolve("omp", "review")})
@@ -491,9 +386,6 @@ func doctor(ctx *harness.Ctx) {
 		fmt.Printf("%-14s %s\n", r[0], r[1])
 	}
 	fmt.Println("\nnotes")
-	fmt.Println("  rig: OPENRIG_NO_KERNEL=1 skips the OpenRig kernel and its operator seats; only pod seats start.")
-	fmt.Println("  rig: the OpenRig daemon seeds ~/.claude/skills and ~/.agents/skills (upstream limitation).")
-	fmt.Println("  rig: claude-code and codex seats keep the real HOME and read the generated CLAUDE_CONFIG_DIR and CODEX_HOME.")
 	fmt.Println("  claude: managed settings in /Library/Application Support/ClaudeCode win over generated settings.json.")
 	fmt.Println("  codex: also reads ~/.agents/skills (no CODEX_HOME-relative override).")
 	fmt.Println("  memory: launches spawn `harness dream` once the last is over 20h old, at most hourly; log in " + dream.LogPath(ctx.State) + ".")

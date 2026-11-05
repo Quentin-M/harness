@@ -8,7 +8,7 @@ description: Use when a change needs visible evidence (UI, API, CLI/TUI, perf) b
 A claim without an artifact is a guess. Capture it, read it back, attach it.
 
 Scripts live in `scripts/` next to this file (call it `$V`). Every script has `--help`.
-Write artifacts to `.pod/<slug>/proof/` or `/tmp/proof-<pr>/`, never into tracked source.
+Write artifacts to `/tmp/proof-<pr>/`, never into tracked source.
 
 ## 1. Pick the capture per surface
 

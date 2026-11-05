@@ -20,7 +20,6 @@ import (
 
 	assets "github.com/Quentin-M/harness"
 	"github.com/Quentin-M/harness/internal/fsx"
-	"github.com/Quentin-M/harness/internal/lease"
 	"github.com/Quentin-M/harness/internal/memory"
 	"github.com/Quentin-M/harness/internal/sys"
 	"github.com/Quentin-M/harness/internal/transcript"
@@ -29,7 +28,7 @@ import (
 const (
 	// Stale is how old the last successful dream gets before a launch starts the next one.
 	Stale = 20 * time.Hour
-	// SpawnGap spaces detached spawns: a rig bringing up 20 seats starts one dream, and a failing
+	// SpawnGap spaces detached spawns: 20 launches in a burst start one dream, and a failing
 	// project is retried at most hourly.
 	SpawnGap = time.Hour
 
@@ -38,7 +37,6 @@ const (
 	digestBudget  = 200_000
 	minShare      = 4_000 // smallest digest worth sending
 	instructBytes = 40_000
-	resource      = "dream"
 )
 
 // Tools is everything a dream may call: file access inside the memory directory.
@@ -50,7 +48,6 @@ type Runner struct {
 	Self    string  // harness binary, which serves the guard hook
 	Model   string  // resolved model id
 	Env     sys.Env // the interactive claude launch env: config dir and gateway
-	Lease   *lease.Store
 	Timeout time.Duration
 	Now     func() time.Time
 	Log     io.Writer
@@ -72,6 +69,8 @@ func (p project) key() string { return filepath.Base(filepath.Dir(p.dir)) }
 
 func lastPath(state string) string       { return filepath.Join(state, "dream", "last") }
 func stampPath(state, key string) string { return filepath.Join(state, "dream", "projects", key) }
+func runLockPath(state string) string    { return filepath.Join(state, "dream", "run.lock") }
+func spawnStampPath(state string) string { return filepath.Join(state, "dream", "spawned") }
 func LogPath(state string) string        { return filepath.Join(state, "dream", "dream.log") }
 func reportPath(state, key string, t time.Time) string {
 	return filepath.Join(state, "dream", t.Format("2006-01-02"), key+".md")
@@ -81,17 +80,16 @@ func reportPath(state, key string, t time.Time) string {
 // every project succeeded; each project keeps its own stamp, so a retry redoes only the failures.
 func (r *Runner) Run(o Options) error {
 	now := r.Now()
-	holder := fmt.Sprintf("dream-%d", os.Getpid())
 	if !o.DryRun {
-		ok, err := r.Lease.Acquire(resource, 1, holder)
+		lock, err := lockFile(runLockPath(r.State), syscall.LOCK_EX|syscall.LOCK_NB)
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			r.logf("another dream is running; exiting")
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("dream: %w", err)
 		}
-		if !ok {
-			r.logf("another dream holds the lease; exiting")
-			return nil
-		}
-		defer r.Lease.Release(resource, holder)
+		defer lock.Close()
 	}
 	stamps := o.Project == "" && o.Since == 0
 	from, err := r.windowStart(now, o)
@@ -132,9 +130,6 @@ func (r *Runner) Run(o Options) error {
 		if o.DryRun {
 			fmt.Fprintf(r.Out, "%-60s %4d sessions %8d bytes  %s\n", p.root, len(p.sessions), len(prompt), p.dir)
 			continue
-		}
-		if _, err := r.Lease.Acquire(resource, 1, holder); err != nil {
-			return fmt.Errorf("dream: renew lease: %w", err)
 		}
 		start := time.Now()
 		report, err := r.dream(p, prompt)
@@ -271,7 +266,7 @@ func (r *Runner) prompt(p project) (string, error) {
 }
 
 // digests renders sessions oldest first within budget bytes. Identical turns repeat across
-// watchdog seats, so each is kept once, in its newest session. Newest sessions are kept while each
+// resumed and forked sessions, so each is kept once, in its newest session. Newest sessions are kept while each
 // can still get min(its size, minShare); the budget is then shared fairly, small sessions whole.
 func digests(ss []transcript.Session, budget int) string {
 	newest := slices.Clone(ss)
@@ -484,15 +479,44 @@ func Due(state string, now time.Time) bool {
 	return err != nil || now.Sub(t) > Stale
 }
 
+// lockFile flocks path, creating it. The lock lives as long as the returned file stays open, and
+// the kernel drops it when the holder dies.
+func lockFile(path string, how int) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), how); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
 // Spawn starts `exe dream` detached when one is due, at most once per SpawnGap across processes.
 // Its output appends to the dream log; the caller never waits on it.
-func Spawn(state, exe string, environ []string, gate *lease.Store) error {
-	if !Due(state, gate.Now()) {
+func Spawn(state, exe string, environ []string, now time.Time) error {
+	if !Due(state, now) {
 		return nil
 	}
-	holder := fmt.Sprintf("launch-%d-%d", os.Getpid(), time.Now().UnixNano())
-	if ok, err := gate.Acquire("dream-spawn", 1, holder); err != nil || !ok {
-		return err
+	gate, err := lockFile(spawnStampPath(state), syscall.LOCK_EX)
+	if err != nil {
+		return fmt.Errorf("spawn dream: %w", err)
+	}
+	defer gate.Close()
+	if fi, err := gate.Stat(); err != nil {
+		return fmt.Errorf("spawn dream: %w", err)
+	} else if fi.Size() > 0 && now.Sub(fi.ModTime()) < SpawnGap {
+		return nil
+	}
+	if _, err := gate.WriteString("x"); err != nil {
+		return fmt.Errorf("spawn dream: %w", err)
+	}
+	if err := os.Chtimes(gate.Name(), now, now); err != nil {
+		return fmt.Errorf("spawn dream: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(LogPath(state)), 0o755); err != nil {
 		return err

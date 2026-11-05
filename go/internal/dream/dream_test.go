@@ -3,16 +3,18 @@ package dream
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
-	"github.com/Quentin-M/harness/internal/lease"
 	"github.com/Quentin-M/harness/internal/memory"
 	"github.com/Quentin-M/harness/internal/sys"
 	"github.com/Quentin-M/harness/internal/transcript"
@@ -93,7 +95,6 @@ func newWorld(t *testing.T) *world {
 	must(t, os.Chmod(bin, 0o755))
 	w.runner = &Runner{State: w.state, Claude: bin, Self: "/opt/it's/harness", Model: "fast-model",
 		Env:     sys.Env{"PATH": "/usr/bin:/bin", "FAKE_LOG": w.log, "CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLAUDE_CONFIG_DIR": filepath.Join(w.state, "claude")},
-		Lease:   &lease.Store{Dir: filepath.Join(w.state, "rig", "leases"), TTL: time.Hour, Now: func() time.Time { return now }},
 		Timeout: 10 * time.Second, Now: func() time.Time { return now }, Log: w.logBuf, Out: w.out}
 	return w
 }
@@ -315,20 +316,59 @@ func TestHungClaudeIsKilled(t *testing.T) {
 	}
 }
 
-func TestHeldLeaseExitsQuietly(t *testing.T) {
+func TestRunningDreamRefusesASecond(t *testing.T) {
 	w := newWorld(t)
 	w.claudeSession(w.plain, time.Hour, "PLAIN-ASK")
-	ok, err := w.runner.Lease.Acquire(resource, 1, "other")
-	if !ok || err != nil {
-		t.Fatal(ok, err)
-	}
+	lock, err := lockFile(runLockPath(w.state), syscall.LOCK_EX|syscall.LOCK_NB)
+	must(t, err)
 	must(t, w.runner.Run(Options{}))
 	if n := len(w.calls()); n != 0 {
-		t.Errorf("calls = %d under a held lease", n)
+		t.Errorf("calls = %d while another dream runs", n)
 	}
 	if _, err := os.Stat(lastPath(w.state)); err == nil {
-		t.Error("last advanced under a held lease")
+		t.Error("last advanced while another dream runs")
 	}
+	lock.Close()
+	must(t, w.runner.Run(Options{}))
+	if n := len(w.calls()); n != 1 {
+		t.Errorf("calls = %d after the lock was released, want 1", n)
+	}
+}
+
+// A holder killed with SIGKILL leaves its lock file behind; the kernel must still free the lock.
+func TestLockDiesWithItsHolder(t *testing.T) {
+	path := filepath.Join(tmp(t), "run.lock")
+	holder := exec.Command(os.Args[0], "-test.run=TestHoldLockHelper")
+	holder.Env = append(os.Environ(), "DREAM_HOLD_LOCK="+path)
+	out, err := holder.StdoutPipe()
+	must(t, err)
+	must(t, holder.Start())
+	buf := make([]byte, 1)
+	if _, err := io.ReadFull(out, buf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockFile(path, syscall.LOCK_EX|syscall.LOCK_NB); !errors.Is(err, syscall.EWOULDBLOCK) {
+		t.Fatalf("lock while holder lives: err = %v, want EWOULDBLOCK", err)
+	}
+	must(t, holder.Process.Kill())
+	holder.Wait()
+	lock, err := lockFile(path, syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		t.Fatalf("lock after holder died: %v", err)
+	}
+	lock.Close()
+}
+
+func TestHoldLockHelper(t *testing.T) {
+	path := os.Getenv("DREAM_HOLD_LOCK")
+	if path == "" {
+		t.Skip("helper process")
+	}
+	if _, err := lockFile(path, syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout.WriteString("1")
+	select {}
 }
 
 func TestNoTranscriptsIsANoOp(t *testing.T) {
@@ -413,7 +453,6 @@ func TestSpawnGate(t *testing.T) {
 	write(t, exe, "#!/bin/sh\necho \"$@\" >> "+marker+"\n")
 	must(t, os.Chmod(exe, 0o755))
 	clock := now
-	gate := &lease.Store{Dir: filepath.Join(state, "leases"), TTL: SpawnGap, Now: func() time.Time { return clock }}
 	count := func(want int) int {
 		n := 0
 		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -426,19 +465,19 @@ func TestSpawnGate(t *testing.T) {
 	}
 
 	must(t, writeStamp(lastPath(state), now.Add(-time.Hour)))
-	must(t, Spawn(state, exe, nil, gate))
+	must(t, Spawn(state, exe, nil, clock))
 	if n := count(0); n != 0 {
 		t.Errorf("fresh stamp spawned %d", n)
 	}
 	must(t, writeStamp(lastPath(state), now.Add(-Stale-time.Minute)))
 	for range 5 {
-		must(t, Spawn(state, exe, nil, gate))
+		must(t, Spawn(state, exe, nil, clock))
 	}
 	if n := count(1); n != 1 {
 		t.Errorf("stale stamp spawned %d dreams, want 1", n)
 	}
 	clock = clock.Add(SpawnGap + time.Minute)
-	must(t, Spawn(state, exe, nil, gate))
+	must(t, Spawn(state, exe, nil, clock))
 	if n := count(2); n != 2 {
 		t.Errorf("after the gap spawned %d total, want 2", n)
 	}

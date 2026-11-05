@@ -30,7 +30,7 @@ var models = map[string]any{
 	"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000},
 		"rev": map[string]any{"context": 500000}, "small": map[string]any{}},
 	"roles":     map[string]any{"default": "big", "review": "rev", "fast": "small", "vision": "rev", "tiny": "small"},
-	"overrides": map[string]any{"codex": map[string]any{"default": "rev"}},
+	"overrides": map[string]any{"codex": map[string]any{"default": "rev"}, "omp": map[string]any{"smol": "small"}},
 }
 
 func TestMain(m *testing.M) {
@@ -105,7 +105,6 @@ func newFixture(t *testing.T) *fixture {
 	md(t, extra+"/AGENTS.md", "# EXTRA\n", nil)
 	md(t, extra+"/skills/trace/SKILL.md", "extra trace\n", kv{"name": "trace"})
 	md(t, extra+"/rules/z.md", "RULE-EXTRA\n", nil)
-	write(t, root+"/rigs/x/rig.yaml", twoSeats)
 	modelsFile := filepath.Join(tmp, "models.yaml")
 	write(t, modelsFile, dumpYAML(t, models))
 	managed := filepath.Join(tmp, "managed")
@@ -382,7 +381,7 @@ func TestOmpRoles(t *testing.T) {
 	cfg := readYAML(t, f.p("omp/agent/config.yml"))
 	roles := cfg["modelRoles"].(map[string]any)
 	eq(t, roles["review"], "gw/rev", "review")
-	eq(t, roles["slow"], "gw/rev", "slow")
+	eq(t, roles["slow"], "gw/big", "slow falls back to default")
 	eq(t, roles["default"], "gw/big", "default")
 	eq(t, roles["smol"], "gw/small", "smol")
 	eq(t, roles["fast"], "gw/small", "fast")
@@ -438,6 +437,20 @@ func TestOmpEnvAndModelFlag(t *testing.T) {
 	eq(t, envVal(f.launch("--codex"), "CODEX_HOME"), f.p("codex"), "CODEX_HOME")
 }
 
+// The key helper picks its gateway from ANTHROPIC_BASE_URL and LITELLM_URL. Claude Code passes
+// managed env to it; omp and codex don't, so a key from the wrong gateway would 401.
+func TestKeyHelperGetsTheGatewayEnv(t *testing.T) {
+	f := newFixture(t)
+	write(t, f.managed+"/90-canary.json", `{"env": {"ANTHROPIC_BASE_URL": "https://gw2.example", "LITELLM_URL": "https://mint.example"}}`)
+	for _, h := range []string{"--omp", "--codex"} {
+		out := f.launch(h)
+		eq(t, envVal(out, "ANTHROPIC_BASE_URL"), "https://gw2.example", h+" ANTHROPIC_BASE_URL")
+		eq(t, envVal(out, "LITELLM_URL"), "https://mint.example", h+" LITELLM_URL")
+	}
+	out := f.launchEnv(map[string]string{"LITELLM_URL": "https://mine.example"}, "--omp")
+	eq(t, envVal(out, "LITELLM_URL"), "https://mine.example", "shell env wins")
+}
+
 func TestBinaryResolutionSkipsHarnessShims(t *testing.T) {
 	f := newFixture(t)
 	for _, h := range []string{"omp", "claude", "codex"} {
@@ -465,28 +478,6 @@ func TestDoctorShowsManagedSources(t *testing.T) {
 	contains(t, doc, "gw-key ("+filepath.Join(f.managed, "05-auth.json")+")", "key source")
 }
 
-func TestRigExecsRawRig(t *testing.T) {
-	f := newFixture(t)
-	out := f.launch("--rig")
-	eq(t, out.Argv, []string{f.p("rig/npm/node_modules/.bin/rig")}, "bare rig")
-	eq(t, envVal(out, "OPENRIG_HOME"), f.p("rig"), "OPENRIG_HOME")
-	eq(t, envVal(out, "OPENRIG_NO_KERNEL"), "1", "OPENRIG_NO_KERNEL")
-	eq(t, envVal(out, "OPENRIG_RUNTIME_CODEX_HOOKS_ENABLED"), "false", "codex activity hooks off")
-	eq(t, envVal(out, "CLAUDE_CONFIG_DIR"), f.p("claude"), "seat CLAUDE_CONFIG_DIR")
-	eq(t, envVal(out, "CODEX_HOME"), f.p("codex"), "seat CODEX_HOME")
-	eq(t, envVal(out, "ANTHROPIC_BASE_URL"), "https://gw.example", "seat gateway")
-	contains(t, read(t, f.p("claude/CLAUDE.md")), "# BASE", "rig renders claude config")
-	contains(t, read(t, f.p("codex/config.toml")), "https://gw.example/v1", "rig renders codex config")
-	if exists(f.p("rig/state/omp")) {
-		t.Error("omp seats seeded")
-	}
-	eq(t, envVal(out, "HOME"), f.home, "HOME")
-	// everything after --rig is rig's, even launcher flags and subcommand names
-	eq(t, f.launch("--rig", "up", "x.yaml", "--model", "m", "doctor").Argv[1:], []string{"up", "x.yaml", "--model", "m", "doctor"}, "rig argv")
-}
-
-const twoSeats = "name: x\npods:\n  - id: pod\n    members:\n      - id: lead\n      - id: verifier\n"
-
 func TestNothingWrittenOutsideState(t *testing.T) {
 	f := newFixture(t)
 	snap := func() []string {
@@ -496,7 +487,7 @@ func TestNothingWrittenOutsideState(t *testing.T) {
 	}
 	before := snap()
 	f.run("sync")
-	for _, h := range []string{"omp", "claude", "codex", "rig"} {
+	for _, h := range []string{"omp", "claude", "codex"} {
 		f.launchEnv(map[string]string{"HERDR_ENV": "1"}, "--"+h)
 	}
 	f.run("doctor")
@@ -509,7 +500,7 @@ func TestNothingWrittenOutsideState(t *testing.T) {
 		return nil
 	})
 	want := []string{"AGENTS.md", "a.md", "i-have-adhd.md", "SKILL.md", "SKILL.md", "SKILL.md",
-		"pstack-sheet.yaml", "rig.yaml"}
+		"pstack-sheet.yaml"}
 	sort.Strings(files)
 	sort.Strings(want)
 	eq(t, files, want, "root files")
@@ -619,7 +610,7 @@ func TestOpencodeVanillaIgnoresModelAndConfig(t *testing.T) {
 	for _, flag := range []string{"--opencode", "--oc"} {
 		out := f.launch(flag, "--model", "review", "--", "run", "--model", "x")
 		eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/opencode"), "run", "--model", "x"}, flag+" argv")
-		for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "OPENRIG_HOME"} {
+		for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR"} {
 			eq(t, out.Env[k], (*string)(nil), flag+" "+k)
 		}
 	}
@@ -634,84 +625,6 @@ func TestHarnessDefaultPicksHarness(t *testing.T) {
 	eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "hello"}, "argv")
 	eq(t, envVal(out, "PI_CODING_AGENT_DIR"), f.p("omp/agent"), "omp env")
 	eq(t, f.launchEnv(map[string]string{"HARNESS_DEFAULT": "omp"}, "--claude").Argv[0], filepath.Join(f.tmp, "bin/claude"), "flag wins")
-}
-
-func TestLeaseCapsHeavyRunsAcrossProcesses(t *testing.T) {
-	f := newFixture(t)
-	exit := func(args ...string) int {
-		cmd := exec.Command(harnessBin, append([]string{"lease"}, args...)...)
-		for k, v := range f.env {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-		if err := cmd.Run(); err != nil {
-			var ee *exec.ExitError
-			if !errors.As(err, &ee) {
-				t.Fatal(err)
-			}
-			return ee.ExitCode()
-		}
-		return 0
-	}
-	codes := make(chan int, 12)
-	for i := range 12 {
-		go func() { codes <- exit("acquire", "box", "2", fmt.Sprintf("seat-%d", i)) }()
-	}
-	won := 0
-	for range 12 {
-		switch c := <-codes; c {
-		case 0:
-			won++
-		case 75:
-		default:
-			t.Fatalf("acquire exit %d", c)
-		}
-	}
-	eq(t, won, 2, "processes holding a cap-2 lease")
-	lines := strings.Split(strings.TrimSpace(f.run("lease", "list", "box")), "\n")
-	eq(t, len(lines), 2, "listed leases")
-	holder := strings.Split(lines[0], "\t")[0]
-	eq(t, exit("acquire", "box", "2", "late"), 75, "full exits 75")
-	eq(t, exit("release", "box", holder), 0, "release")
-	eq(t, exit("acquire", "box", "2", "late"), 0, "acquire after release")
-	eq(t, exit("release", "box", "nobody"), 1, "release unheld")
-	if !exists(f.p("rig/leases/box.json")) {
-		t.Error("leases not under the rig state dir")
-	}
-}
-
-func TestFreshRelaunchesTheCallingSeatDetached(t *testing.T) {
-	f := newFixture(t)
-	log := filepath.Join(f.tmp, "rig.log")
-	bin := filepath.Join(f.tmp, "fakerig")
-	write(t, filepath.Join(bin, "rig"), "#!/bin/sh\necho \"$@\" >> "+log+"\n")
-	must(t, os.Chmod(filepath.Join(bin, "rig"), 0o755))
-	start := time.Now()
-	f.runEnv(map[string]string{"PATH": bin + ":" + f.env["PATH"], "OPENRIG_SESSION_NAME": "verify-reviewer-1@gg",
-		"HARNESS_FRESH_DELAY": "300ms"}, "fresh")
-	if time.Since(start) > 250*time.Millisecond {
-		t.Error("fresh blocked on the relaunch")
-	}
-	if exists(log) {
-		t.Fatal("relaunch ran before the delay")
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !exists(log) && time.Now().Before(deadline) {
-		time.Sleep(50 * time.Millisecond)
-	}
-	eq(t, strings.TrimSpace(read(t, log)), "seat launch verify-reviewer-1@gg --fresh --stop --reason fresh context for the next row", "rig argv")
-}
-
-func TestFreshOutsideASeatFails(t *testing.T) {
-	f := newFixture(t)
-	cmd := exec.Command(harnessBin, "fresh")
-	for k, v := range f.env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("fresh without OPENRIG_SESSION_NAME succeeded")
-	}
-	contains(t, string(out), "OPENRIG_SESSION_NAME", "error names the missing seat")
 }
 
 func TestDiagramsLintsFilesAndFailsOnIssues(t *testing.T) {

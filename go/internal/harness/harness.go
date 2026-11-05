@@ -1,4 +1,4 @@
-// Package harness defines the contract every front-end (claude, omp, codex, opencode, rig) implements.
+// Package harness defines the contract every front-end (claude, omp, codex, opencode) implements.
 package harness
 
 import (
@@ -43,11 +43,11 @@ func Get(name string) (Harness, bool) {
 	return h, ok
 }
 
-// Synced lists harnesses that `harness sync` regenerates (everything except launch-only ones).
+// Synced lists harnesses that `harness sync` regenerates (everything except launch-only opencode).
 func Synced() []string {
 	var out []string
 	for name := range registry {
-		if name != "rig" && name != "opencode" {
+		if name != "opencode" {
 			out = append(out, name)
 		}
 	}

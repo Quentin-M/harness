@@ -33,7 +33,7 @@ harness you are running in. Keep the pstack intent, swap the mechanism.
 
 pstack's `poteto-agent` and `Comment Sicko` are role prompts, not installed agents: paste the body of
 `poteto-mode/references/agents/{poteto-agent,comment-sicko}.md` at the top of the spawned subagent's task.
-omp bundles `task`, `scout`, `reviewer`, `security-reviewer`, `sonic`. Pod roles live on OpenRig (`agents/`).
+omp bundles `task`, `scout`, `reviewer`, `security-reviewer`, `sonic`.
 
 ## 3. Cloud agents (`environment: "cloud"`)
 
@@ -64,7 +64,7 @@ assumption, and move on (principle-never-block-on-the-human).
 | `/loop` dynamic mode, "until X" | `/loop --until '<check cmd>' <prompt>` | `/loop <prompt>` (self-paced) | `/goal <objective>` |
 | drive one task to a predicate | `/goal set <objective>` (`show`, `pause`, `resume`, `drop`, `budget <N\|off>`); `omp --goal "<objective>"` at launch | `/goal <condition>`: keeps working across turns until the condition holds; `/goal clear` stops it | `/goal <objective>`; `/goal resume` after pause or usage limit |
 
-Every pod role runs its brief as a `/goal` whose finish condition is the brief's ACCEPTANCE.
+Run a brief as a `/goal` whose finish condition is the brief's ACCEPTANCE.
 A loop needs a check that can pass or fail; a vague condition spins forever.
 
 ## 6. Paths (`.cursor/...`)

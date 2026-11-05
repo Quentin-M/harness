@@ -70,8 +70,8 @@ func (H) Sync(ctx *harness.Ctx) error {
 			st = o
 		}
 	}
-	// harness installs these hooks itself; recording their trust keeps fresh codex seats off codex's
-	// startup hook-review prompt, which blocks an unattended seat
+	// harness installs these hooks itself; recording their trust keeps fresh codex sessions off codex's
+	// startup hook-review prompt, which blocks an unattended session
 	owned, err := ownedHooks(d, mem)
 	if err != nil {
 		return err

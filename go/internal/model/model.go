@@ -23,6 +23,9 @@ type Config struct {
 	KeyCmd  string
 	BaseSrc string // where BaseURL came from
 	KeySrc  string // where KeyCmd came from
+	// KeyEnv is what the key helper reads to pick its gateway. Claude Code hands it the
+	// managed env; omp and codex run it with the launch env, so the launcher sets these.
+	KeyEnv map[string]string
 }
 
 // ModelSpec is one entry of `models`.
@@ -57,6 +60,13 @@ func Load(env sys.Env) (*Config, error) {
 	c.BaseURL, c.BaseSrc = pick(env.Get("ANTHROPIC_BASE_URL"), "env ANTHROPIC_BASE_URL", menv["ANTHROPIC_BASE_URL"])
 	c.KeyCmd, c.KeySrc = pick(env.Get("HARNESS_KEY_CMD"), "env HARNESS_KEY_CMD", helper)
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
+	c.KeyEnv = map[string]string{}
+	if c.BaseURL != "" {
+		c.KeyEnv["ANTHROPIC_BASE_URL"] = c.BaseURL
+	}
+	if u, _ := pick(env.Get("LITELLM_URL"), "env LITELLM_URL", menv["LITELLM_URL"]); u != "" {
+		c.KeyEnv["LITELLM_URL"] = u
+	}
 	return c, nil
 }
 
