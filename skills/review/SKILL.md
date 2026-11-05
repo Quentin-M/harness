@@ -26,6 +26,14 @@ Scripts live in `scripts/` next to this file (call it `$RV`):
 | `$RV/threads` | `state`, `thread`, `reply`, `resolve` for PR threads; `bot-request`, `bot-wait` only with `--with-bot` |
 | `tests/test_merge.sh` | behavior tests for the merge |
 
+## Every thread you answer gets resolved
+
+This holds inside the loop and outside it, for a bot or a human finding: answer a PR review thread only with
+`$RV/threads reply <thread-id> --resolve`, never with a bare `gh api .../comments/<id>/replies`. An answered thread
+left open is noise: the bot re-posts it at its new line every round and the PR page fills with stale findings. The one
+exception is a human's pushback you disagree with: reply only and leave it open for them. Before asking for a new bot
+round, `$RV/threads state <pr>` must show no unresolved thread whose last author is you.
+
 ## Arguments
 
 | arg | meaning |
