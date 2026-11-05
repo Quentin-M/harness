@@ -44,6 +44,19 @@ type settings struct {
 // IdleCompactMinTokens matches omp's compaction.idleThresholdTokens; claude's default is 200K.
 const IdleCompactMinTokens = "100000"
 
+// env keeps idle gaps under an hour on cache reads, defers MCP tool schemas, and runs subagents on
+// the fast role. Explore and background tasks use the haiku alias, which the gateway lacks.
+func env(m *model.Config) map[string]string {
+	fast := m.RoleModel("claude", "fast")
+	return map[string]string{
+		"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS": IdleCompactMinTokens,
+		"ENABLE_PROMPT_CACHING_1H":            "1",
+		"ENABLE_TOOL_SEARCH":                  "true",
+		"CLAUDE_CODE_SUBAGENT_MODEL":          fast,
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":       fast,
+	}
+}
+
 type attribution struct {
 	Commit string `json:"commit"`
 	PR     string `json:"pr"`
@@ -67,7 +80,7 @@ func (H) Sync(ctx *harness.Ctx) error {
 			"Bash(git push --force-with-lease *)", "Bash(git push --force-with-lease=*)"}},
 		Hooks:       hooks,
 		IdleCompact: true,
-		Env:         map[string]string{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS": IdleCompactMinTokens},
+		Env:         env(m),
 	}
 	path := filepath.Join(d, "settings.json")
 	if err := writeSettings(path, s); err != nil {

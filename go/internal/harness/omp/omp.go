@@ -25,8 +25,8 @@ func init() { harness.Register(H{}) }
 
 // Roles maps omp modelRoles keys to models.yaml roles.
 var Roles = [][2]string{
-	{"default", "default"}, {"smol", "fast"}, {"slow", "slow"}, {"plan", "default"}, {"task", "default"},
-	{"advisor", "advisor"}, {"vision", "vision"}, {"commit", "fast"}, {"tiny", "tiny"},
+	{"default", "default"}, {"smol", "smol"}, {"slow", "slow"}, {"plan", "default"}, {"task", "fast"},
+	{"advisor", "advisor"}, {"vision", "vision"}, {"commit", "smol"}, {"tiny", "tiny"},
 	{"memory", "tiny"}, {"judge", "tiny"}, {"review", "review"}, {"fast", "fast"},
 }
 
@@ -34,7 +34,7 @@ var Roles = [][2]string{
 var API = map[string]string{"anthropic": "anthropic-messages", "openai": "openai-responses"}
 
 var modelKeys = map[string]string{"name": "name", "context": "contextWindow", "max_tokens": "maxTokens",
-	"reasoning": "reasoning", "input": "input"}
+	"reasoning": "reasoning", "input": "input", "cost": "cost", "prompt_cache": "promptCache"}
 
 func (H) Name() string { return "omp" }
 
@@ -119,31 +119,28 @@ func (H) Sync(ctx *harness.Ctx) error {
 		{"models.yml", fsx.DumpYAML(fsx.OMap("providers", Providers(ctx.Models)))},
 		{"AGENTS.md", []byte(ctx.Layers.Instructions(ctx.Models, "omp"))},
 		{"APPEND_SYSTEM.md", []byte(StyleBody(ctx))},
-		{"WATCHDOG.yml", Watchdog(ctx.Models)},
 	}
 	for _, f := range files {
 		if err := fsx.Write(filepath.Join(d, f.name), f.data); err != nil {
 			return err
 		}
 	}
+	if err := seed(filepath.Join(d, "WATCHDOG.yml"), WatchdogSeed); err != nil {
+		return err
+	}
 	return ctx.Layers.LinkSkills(filepath.Join(d, "skills"))
 }
 
-// Watchdog is omp's WATCHDOG.yml: a direction advisor on the advisor model and a strict
-// reviewer on the review model, both resolved from models.yaml so ids never drift.
-func Watchdog(m *model.Config) []byte {
-	return fsx.DumpYAML(fsx.OMap("advisors", []any{
-		// Each note costs the primary ~2 requests; every 5th update keeps the steering at a third of the cost.
-		fsx.OMap("name", "Advisor", "model", m.Resolve("omp", "advisor"), "reviewInterval", 5,
-			"instructions", "Steer direction: wrong approach, missed constraints, scope drift, hallucinated APIs.\n"),
-		// A per-turn review feeds the primary mid-task notes that cost more time than they catch.
-		fsx.OMap("name", "Reviewer", "model", m.Resolve("omp", "review")+":high", "reviewMode", "agent-end",
-			"tools", []any{"read", "grep", "glob", "lsp"}, "maxNotesPerUpdate", 3,
-			"instructions", "Review the primary's changes as a strict code reviewer when it hands off.\n"+
-				"Read the touched code and check correctness, edge cases,\n"+
-				"repo conventions (CLAUDE.md), missing/weak tests, and unverified claims.\n"+
-				"Raise `blocker` when work is handed off broken, untested, or contradicting the evidence.\n"),
-	}))
+// WatchdogSeed is the first user-scope WATCHDOG.yml: one review per handoff on the advisor role.
+// A scheduled mid-task review re-reads the transcript each time, so its cost grows with turns.
+const WatchdogSeed = "advisors:\n  - name: Reviewer\n    reviewMode: agent-end\n"
+
+// seed writes data to path unless the file exists: from then on omp's editor owns it.
+func seed(path, data string) error {
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return fsx.Write(path, []byte(data))
 }
 
 // readConfig parses an existing omp config.yml; a missing file is an empty map.

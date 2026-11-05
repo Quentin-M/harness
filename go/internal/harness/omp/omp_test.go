@@ -28,11 +28,12 @@ func write(t *testing.T, path, text string, mode os.FileMode) {
 func gateway() *model.Config {
 	return &model.Config{BaseURL: "https://gw.example", KeyCmd: "gw-key", Raw: map[string]any{
 		"provider": "gw", "api": "openai", "disable_strict_tools": true,
-		"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000},
+		"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000,
+			"cost": map[string]any{"input": 4, "cacheWrite": 5}, "prompt_cache": map[string]any{"short": 300}},
 			"rev": map[string]any{"context": 500000}, "small": nil},
 		"roles": map[string]any{"default": "big", "review": "rev", "fast": "small", "vision": "rev", "tiny": "small",
 			"extra": "rev"},
-		"overrides": map[string]any{"omp": map[string]any{"advisor": "big:medium", "fast": "small:low",
+		"overrides": map[string]any{"omp": map[string]any{"advisor": "rev:high", "smol": "small:low",
 			"slow": "big:high"}},
 	}}
 }
@@ -80,8 +81,8 @@ func TestSyncGateway(t *testing.T) {
 	cfg := readYAML(t, filepath.Join(d, "config.yml"))
 	roles := cfg["modelRoles"].(map[string]any)
 	for k, want := range map[string]string{"default": "gw/big", "slow": "gw/big:high", "review": "gw/rev", "commit": "gw/small:low", "vision": "gw/rev",
-		"advisor": "gw/big:medium", "plan": "gw/big", "task": "gw/big",
-		"smol": "gw/small:low", "fast": "gw/small:low", "memory": "gw/small", "judge": "gw/small", "extra": "gw/rev"} {
+		"advisor": "gw/rev:high", "plan": "gw/big", "task": "gw/small",
+		"smol": "gw/small:low", "fast": "gw/small", "memory": "gw/small", "judge": "gw/small", "extra": "gw/rev"} {
 		if roles[k] != want {
 			t.Errorf("modelRoles.%s = %v, want %s", k, roles[k], want)
 		}
@@ -89,21 +90,14 @@ func TestSyncGateway(t *testing.T) {
 	if _, ok := roles["image"]; ok {
 		t.Errorf("image role points at a chat model: %v", roles["image"])
 	}
-	var wd struct {
-		Advisors []struct {
-			Name, Model string
-			Tools       []string
-			ReviewMode  string `yaml:"reviewMode"`
-			Interval    int    `yaml:"reviewInterval"`
-		}
+	if b, _ := os.ReadFile(filepath.Join(d, "WATCHDOG.yml")); string(b) != WatchdogSeed {
+		t.Errorf("WATCHDOG.yml = %q", b)
 	}
-	if b, err := os.ReadFile(filepath.Join(d, "WATCHDOG.yml")); err != nil || yaml.Unmarshal(b, &wd) != nil {
-		t.Fatalf("WATCHDOG.yml: %v", err)
+	if s := cfg["startup"].(map[string]any); s["checkUpdate"] != false {
+		t.Errorf("startup = %v: `omp update` would replace the fork build", s)
 	}
-	if len(wd.Advisors) != 2 || wd.Advisors[0].Model != "gw/big:medium" || wd.Advisors[1].Model != "gw/rev:high" ||
-		!slices.Equal(wd.Advisors[1].Tools, []string{"read", "grep", "glob", "lsp"}) ||
-		wd.Advisors[0].ReviewMode != "" || wd.Advisors[0].Interval != 5 || wd.Advisors[1].ReviewMode != "agent-end" {
-		t.Errorf("WATCHDOG advisors = %+v", wd.Advisors)
+	if a := cfg["advisor"].(map[string]any); a["enabled"] != true || roles["advisor"] != "gw/rev:high" {
+		t.Errorf("advisor %v, role %v", a, roles["advisor"])
 	}
 	// Each prompt would otherwise pay an auto-thinking judge call, and a Reviewer concern would reopen a finished run.
 	if cfg["defaultThinkingLevel"] != "medium" || cfg["advisor"].(map[string]any)["continueSeverity"] != "blocker" {
@@ -117,6 +111,9 @@ func TestSyncGateway(t *testing.T) {
 	if skills["enableAgentsUser"] != false || cfg["personality"] != "pragmatic" {
 		t.Errorf("base not merged: %v", cfg)
 	}
+	if c := cfg["compaction"].(map[string]any); c["idleTimeoutSeconds"] != 3000 {
+		t.Errorf("compaction.idleTimeoutSeconds = %v, want 3000", c["idleTimeoutSeconds"])
+	}
 	if cfg["memory"].(map[string]any)["backend"] != "off" || cfg["mnemopi"] != nil {
 		t.Errorf("memory = %v %v", cfg["memory"], cfg["mnemopi"])
 	}
@@ -129,7 +126,8 @@ func TestSyncGateway(t *testing.T) {
 	for _, m := range p["models"].([]any) {
 		mm := m.(map[string]any)
 		ids = append(ids, mm["id"].(string))
-		if mm["id"] == "big" && (mm["api"] != "anthropic-messages" || mm["contextWindow"] != 1000000) {
+		if mm["id"] == "big" && (mm["api"] != "anthropic-messages" || mm["contextWindow"] != 1000000 ||
+			mm["cost"].(map[string]any)["cacheWrite"] != 5 || mm["promptCache"].(map[string]any)["short"] != 300) {
 			t.Errorf("big = %v", mm)
 		}
 	}
@@ -145,6 +143,19 @@ func TestSyncGateway(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d, "agents")); !os.IsNotExist(err) {
 		t.Error("agents dir generated")
+	}
+}
+
+// /advisor configure owns WATCHDOG.yml once it exists.
+func TestSyncKeepsAnEditedWatchdog(t *testing.T) {
+	ctx := fixture(t, gateway())
+	path := filepath.Join(AgentDir(ctx.State), "WATCHDOG.yml")
+	write(t, path, "advisors:\n  - name: Mine\n", 0o644)
+	if err := (H{}).Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "advisors:\n  - name: Mine\n" {
+		t.Errorf("WATCHDOG.yml = %q", b)
 	}
 }
 
