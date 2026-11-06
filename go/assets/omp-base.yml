@@ -41,7 +41,7 @@ followUpMode: all
 interruptMode: immediate
 startup:
   quiet: true
-  # omp runs the tools/oh-my-pi fork (make omp); `omp update` would swap in upstream.
+  # omp runs the vendors/omp fork (make omp); `omp update` would swap in upstream.
   checkUpdate: false
 power:
   sleepPrevention: 'off'

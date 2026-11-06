@@ -1,0 +1,4 @@
+[submodule "vendors/omp"]
+	path = vendors/omp
+	url = git@github.com:Quentin-M/oh-my-pi.git
+	branch = qmachu
