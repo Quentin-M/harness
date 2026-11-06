@@ -371,9 +371,14 @@ func resolve(p string) string {
 
 func doctor(ctx *harness.Ctx) {
 	s, m := ctx.Sys, ctx.Models
-	rows := [][2]string{{"root", ctx.Root}, {"state", ctx.State},
-		{"gateway", or(m.BaseURL, "MISSING") + " (" + or(m.BaseSrc, "no source") + ")"},
-		{"key cmd", or(m.KeyCmd, "MISSING") + " (" + or(m.KeySrc, "no source") + ")"}}
+	gateway, key := "none: subscription login", "none"
+	if m.BaseURL != "" {
+		gateway = m.BaseURL + " (" + m.BaseSrc + ")"
+	}
+	if m.KeyCmd != "" {
+		key = m.KeyCmd + " (" + m.KeySrc + ")"
+	}
+	rows := [][2]string{{"root", ctx.Root}, {"state", ctx.State}, {"gateway", gateway}, {"key cmd", key}}
 	for i, d := range ctx.Layers.Dirs {
 		rows = append(rows, [2]string{fmt.Sprintf("layer %d", i+1), d})
 	}

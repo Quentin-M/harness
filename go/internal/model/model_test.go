@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Quentin-M/harness/internal/sys"
@@ -125,7 +126,7 @@ func TestBadManagedSettings(t *testing.T) {
 }
 
 func TestEmbeddedCatalog(t *testing.T) {
-	c := load(t, sys.Env{"HARNESS_MANAGED_SETTINGS": t.TempDir()})
+	c := load(t, sys.Env{"HARNESS_MANAGED_SETTINGS": t.TempDir(), "ANTHROPIC_BASE_URL": "https://gw.example"})
 	want := map[string]string{"default": "claude-opus-5-5", "review": "gpt-6.1-sol", "fast": "claude-sonnet-5-5",
 		"vision": "gpt-5.6-terra", "tiny": "gpt-5.6-luna"}
 	for role, id := range want {
@@ -154,6 +155,28 @@ func TestEmbeddedCatalog(t *testing.T) {
 	}
 	if c.RoleModel("codex", "default") != "gpt-6.1-sol" || c.Provider() != "bit"+"mex" {
 		t.Error("codex override or provider")
+	}
+}
+
+// On subscription logins every role must land on a provider that harness can sign in to.
+func TestEmbeddedCatalogOnSubscriptions(t *testing.T) {
+	c := load(t, sys.Env{"HARNESS_MANAGED_SETTINGS": t.TempDir()})
+	for _, role := range []string{"default", "review", "fast", "smol", "advisor", "vision", "tiny", "slow"} {
+		if got := c.Resolve("omp", role); !strings.HasPrefix(got, "anthropic/") && !strings.HasPrefix(got, "openai-codex/") {
+			t.Errorf("omp %s = %s, want an anthropic/ or openai-codex/ ref", role, got)
+		}
+		if got := c.RoleModel("claude", role); c.subscription(got) != "anthropic" {
+			t.Errorf("claude %s = %s, which no claude login serves", role, got)
+		}
+		if got := c.RoleModel("codex", role); c.subscription(got) != "openai-codex" {
+			t.Errorf("codex %s = %s, which no codex login serves", role, got)
+		}
+	}
+	if got := c.Resolve("omp", "review"); got != "openai-codex/gpt-6.1-sol" {
+		t.Errorf("omp review = %s: the other family should stay reachable", got)
+	}
+	if got := c.Resolve("omp", "smol"); got != "anthropic/claude-sonnet-5-5:low" {
+		t.Errorf("omp smol = %s, want the DeepSeek fallback, Sonnet, at its thinking level", got)
 	}
 }
 

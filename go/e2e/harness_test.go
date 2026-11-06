@@ -27,8 +27,8 @@ var (
 
 var models = map[string]any{
 	"provider": "gw", "api": "openai", "disable_strict_tools": true,
-	"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000},
-		"rev": map[string]any{"context": 500000}, "small": map[string]any{}},
+	"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000, "subscription": "anthropic"},
+		"rev": map[string]any{"context": 500000, "subscription": "openai-codex"}, "small": map[string]any{"fallback": "rev"}},
 	"roles":     map[string]any{"default": "big", "review": "rev", "fast": "small", "vision": "rev", "tiny": "small"},
 	"overrides": map[string]any{"codex": map[string]any{"default": "rev"}, "omp": map[string]any{"smol": "small"}},
 }
@@ -416,6 +416,70 @@ func TestGatewayConfigs(t *testing.T) {
 	out := f.launch("--claude")
 	eq(t, envVal(out, "ANTHROPIC_BASE_URL"), "https://gw.example", "ANTHROPIC_BASE_URL")
 	eq(t, out.Argv[1:], []string{"--dangerously-skip-permissions"}, "argv")
+}
+
+// Without a gateway each harness runs on its own subscription login. Gateway leftovers go, and a
+// role whose model no login serves takes the catalog fallback, else the default role.
+func TestSubscriptionWithoutGateway(t *testing.T) {
+	f := newFixture(t)
+	f.run("sync") // a gateway launch first, so its leftovers must go
+	must(t, os.RemoveAll(f.managed))
+	must(t, os.MkdirAll(f.managed, 0o755))
+	f.run("sync")
+
+	eq(t, fmt.Sprint(get(readYAML(t, f.p("omp/agent/models.yml")), "providers")), "map[]", "omp providers")
+	roles := get(readYAML(t, f.p("omp/agent/config.yml")), "modelRoles").(map[string]any)
+	eq(t, roles["default"], "anthropic/big", "omp default")
+	eq(t, roles["review"], "openai-codex/rev", "omp review")
+	eq(t, roles["fast"], "openai-codex/rev", "omp fast: small falls back to rev")
+	eq(t, roles["smol"], "openai-codex/rev", "omp smol: small falls back to rev")
+
+	cl := readJSON(t, f.p("claude/settings.json"))
+	if _, ok := cl["apiKeyHelper"]; ok {
+		t.Errorf("apiKeyHelper left from the gateway launch: %v", cl["apiKeyHelper"])
+	}
+	eq(t, cl["model"], "big[1m]", "claude model")
+	eq(t, get(cl, "env", "CLAUDE_CODE_SUBAGENT_MODEL"), "big", "claude subagents: no claude login serves rev")
+
+	cx := readTOML(t, f.p("codex/config.toml"))
+	eq(t, cx["model"], "rev", "codex model")
+	if _, ok := cx["model_provider"]; ok {
+		t.Errorf("codex model_provider = %v", cx["model_provider"])
+	}
+
+	nested := map[string]string{"ANTHROPIC_BASE_URL": "https://old.example", "LITELLM_URL": "https://old-mint.example",
+		"HARNESS_KEY_ENV": "managed"}
+	for _, h := range []string{"--claude", "--omp", "--codex"} {
+		out := f.launchEnv(nested, h)
+		for _, k := range []string{"ANTHROPIC_BASE_URL", "LITELLM_URL", "HARNESS_KEY_ENV"} {
+			eq(t, envVal(out, k), "<nil>", h+" "+k)
+		}
+	}
+	eq(t, f.launch("--claude", "--model", "review").Argv[1:3], []string{"--model", "big"}, "claude review falls back")
+	eq(t, f.launch("--omp", "--model", "review").Argv[1:3], []string{"--model", "openai-codex/rev"}, "omp review")
+	contains(t, f.run("doctor"), "none: subscription login", "doctor names the auth mode")
+}
+
+// A personal laptop may point at a gateway from the shell, with no managed settings and no key
+// helper: every harness uses that gateway without a key.
+func TestPersonalGatewayWithoutKeyHelper(t *testing.T) {
+	f := newFixture(t)
+	must(t, os.RemoveAll(f.managed))
+	must(t, os.MkdirAll(f.managed, 0o755))
+	f.env["ANTHROPIC_BASE_URL"] = "https://home.example"
+	f.run("sync")
+	p := get(readYAML(t, f.p("omp/agent/models.yml")), "providers", "gw").(map[string]any)
+	eq(t, p["apiKey"], "not-required", "omp apiKey")
+	eq(t, p["baseUrl"], "https://home.example/v1", "omp baseUrl")
+	eq(t, get(readYAML(t, f.p("omp/agent/config.yml")), "modelRoles", "fast"), "gw/small", "gateway serves every model")
+	if _, ok := readJSON(t, f.p("claude/settings.json"))["apiKeyHelper"]; ok {
+		t.Error("apiKeyHelper set without a helper")
+	}
+	eq(t, envVal(f.launch("--claude"), "ANTHROPIC_BASE_URL"), "https://home.example", "claude gateway")
+	eq(t, get(readTOML(t, f.p("codex/config.toml")), "model_providers", "gw", "base_url"), "https://home.example/v1", "codex base_url")
+	doc := f.run("doctor")
+	contains(t, doc, "https://home.example (env ANTHROPIC_BASE_URL)", "doctor gateway")
+	contains(t, doc, "key cmd        none", "doctor key")
 }
 
 func TestDefaultHarnessIsClaude(t *testing.T) {

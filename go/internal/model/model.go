@@ -170,19 +170,58 @@ func (c *Config) roles(harness string) map[string]any {
 // RoleNames lists `roles` keys in yaml order.
 func (c *Config) RoleNames() []string { return fsx.Keys(c.Map("roles")) }
 
-// RoleModel is the model id for role, falling back to the default role when unset or empty.
+// RoleModel is the model id for role. A model out of harness's reach yields to its catalog
+// `fallback` (thinking suffix kept), else to the default role, as does an unset or empty role.
 func (c *Config) RoleModel(harness, role string) string {
 	roles := c.roles(harness)
-	if v := str(roles[role]); v != "" {
+	v := str(roles[role])
+	if v != "" && c.serves(harness, v) {
 		return v
+	}
+	base, think, _ := strings.Cut(v, ":")
+	if fb := str(c.Attrs(base)["fallback"]); fb != "" && c.serves(harness, fb) {
+		if think != "" {
+			return fb + ":" + think
+		}
+		return fb
 	}
 	return str(roles["default"])
 }
 
-// Ref names id the way harness expects: omp `provider/id`, everything else the bare id.
+// serves reports whether harness reaches id: any model through the gateway; without one, only
+// a model whose `subscription` login harness speaks.
+func (c *Config) serves(harness, id string) bool {
+	if c.BaseURL != "" {
+		return true
+	}
+	switch sub := c.subscription(id); harness {
+	case "omp":
+		return sub != ""
+	case "claude":
+		return sub == "anthropic"
+	case "codex":
+		return sub == "openai-codex"
+	}
+	return true
+}
+
+// subscription is the subscription provider serving id, "" when only the gateway does.
+func (c *Config) subscription(id string) string {
+	base, _, _ := strings.Cut(id, ":")
+	return str(c.Attrs(base)["subscription"])
+}
+
+// Ref names id the way harness expects: omp `provider/id`, with the gateway provider or, without
+// a gateway, the subscription one; everything else the bare id.
 func (c *Config) Ref(harness, id string) string {
-	if harness == "omp" {
+	if harness != "omp" {
+		return id
+	}
+	if c.BaseURL != "" {
 		return c.Provider() + "/" + id
+	}
+	if sub := c.subscription(id); sub != "" {
+		return sub + "/" + id
 	}
 	return id
 }
@@ -194,8 +233,8 @@ func (c *Config) Resolve(harness, role string) string {
 
 // ResolveFlag maps a --model value: a known role resolves, anything else passes through as an id.
 func (c *Config) ResolveFlag(harness, v string) string {
-	if id, ok := c.roles(harness)[v]; ok {
-		return c.Ref(harness, str(id))
+	if _, ok := c.roles(harness)[v]; ok {
+		return c.Resolve(harness, v)
 	}
 	return v
 }

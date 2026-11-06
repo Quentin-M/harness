@@ -188,7 +188,8 @@ func TestSyncKeepsAnEditedWatchdog(t *testing.T) {
 }
 
 func TestSyncWithoutGatewayHasNoProviders(t *testing.T) {
-	ctx := fixture(t, &model.Config{Raw: map[string]any{"provider": "gw", "roles": map[string]any{"default": "big"}}})
+	ctx := fixture(t, &model.Config{Raw: map[string]any{"provider": "gw", "roles": map[string]any{"default": "big"},
+		"models": map[string]any{"big": map[string]any{"subscription": "anthropic"}}}})
 	if err := (H{}).Sync(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +197,7 @@ func TestSyncWithoutGatewayHasNoProviders(t *testing.T) {
 	if p, ok := m["providers"].(map[string]any); !ok || len(p) != 0 {
 		t.Errorf("providers = %v", m["providers"])
 	}
-	if r := readYAML(t, filepath.Join(AgentDir(ctx.State), "config.yml"))["modelRoles"].(map[string]any); r["default"] != "gw/big" {
+	if r := readYAML(t, filepath.Join(AgentDir(ctx.State), "config.yml"))["modelRoles"].(map[string]any); r["default"] != "anthropic/big" {
 		t.Errorf("default = %v", r["default"])
 	}
 }

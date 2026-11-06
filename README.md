@@ -67,6 +67,12 @@ Machine-private rules go in a layer outside any repo, listed in `HARNESS_LAYERS`
 managed settings (`ANTHROPIC_BASE_URL`, `apiKeyHelper`). `ANTHROPIC_BASE_URL` and
 `HARNESS_KEY_CMD` override them.
 
+Pro laptops get the gateway, key helper and managed settings together. A personal laptop has
+none of them, or only a keyless gateway from `ANTHROPIC_BASE_URL`. No gateway means
+subscription mode: each harness signs in with its own login (claude.ai, ChatGPT, omp `/login`).
+A model's `subscription` field names the provider that serves it there; a role whose model no
+login serves takes the model's `fallback` (DeepSeek → Sonnet), else `default`.
+
 Memory is Claude Code's per-project auto memory. codex and omp reach the same directory through
 `harness memory path`. A launch starts `harness dream` when the last run is over 20h old: one
 headless claude per active project distils recent sessions into that directory. Reports and the

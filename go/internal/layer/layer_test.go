@@ -49,7 +49,8 @@ func fixture(t *testing.T) fx {
 	md(t, extra+"/skills/trace/SKILL.md", "extra trace\n", "name: trace\n")
 	md(t, extra+"/rules/z.md", "RULE-EXTRA\n", "")
 	set := Discover(root, sys.Env{"HARNESS_LAYERS": extra + "::" + filepath.Join(tmp, "missing"), "PATH": os.Getenv("PATH")})
-	gw := &model.Config{Raw: map[string]any{"provider": "gw", "roles": map[string]any{"default": "big", "review": "rev"},
+	gw := &model.Config{BaseURL: "https://gw.example", Raw: map[string]any{"provider": "gw",
+		"roles":     map[string]any{"default": "big", "review": "rev"},
 		"overrides": map[string]any{"codex": map[string]any{"default": "rev"}}}}
 	return fx{root: root, extra: extra, set: set, gw: gw}
 }
