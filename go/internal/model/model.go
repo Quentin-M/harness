@@ -57,18 +57,39 @@ func Load(env sys.Env) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.BaseURL, c.BaseSrc = pick(env.Get("ANTHROPIC_BASE_URL"), "env ANTHROPIC_BASE_URL", menv["ANTHROPIC_BASE_URL"])
+	shell := env
+	if env.Get(KeyEnvTag) == "managed" {
+		// A parent launch exported this pair from managed settings, which may have moved since.
+		shell = sys.Env{}
+	}
+	c.BaseURL, c.BaseSrc = pick(shell.Get("ANTHROPIC_BASE_URL"), "env ANTHROPIC_BASE_URL", menv["ANTHROPIC_BASE_URL"])
 	c.KeyCmd, c.KeySrc = pick(env.Get("HARNESS_KEY_CMD"), "env HARNESS_KEY_CMD", helper)
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
 	c.KeyEnv = map[string]string{}
-	if c.BaseURL != "" {
-		c.KeyEnv["ANTHROPIC_BASE_URL"] = c.BaseURL
+	if c.BaseURL == "" {
+		return c, nil
 	}
-	if u, _ := pick(env.Get("LITELLM_URL"), "env LITELLM_URL", menv["LITELLM_URL"]); u != "" {
-		c.KeyEnv["LITELLM_URL"] = u
+	c.KeyEnv["ANTHROPIC_BASE_URL"] = c.BaseURL
+	// The mint URL comes from wherever the base URL came from: a shell base paired with a
+	// managed mint (or the reverse) would mint a key one gateway issues for the other.
+	mint := menv["LITELLM_URL"].val
+	if c.BaseSrc == "env ANTHROPIC_BASE_URL" {
+		mint = shell.Get("LITELLM_URL")
+	} else {
+		c.KeyEnv[KeyEnvTag] = "managed"
+	}
+	if mint != "" {
+		c.KeyEnv["LITELLM_URL"] = mint
 	}
 	return c, nil
 }
+
+// KeyEnvTag marks a KeyEnv the launcher took from managed settings, so a nested launch
+// re-reads them instead of treating the inherited pair as the user's choice.
+const KeyEnvTag = "HARNESS_KEY_ENV"
+
+// KeyEnvVars are the variables the launcher sets from KeyEnv and unsets when KeyEnv lacks them.
+var KeyEnvVars = []string{"ANTHROPIC_BASE_URL", "LITELLM_URL", KeyEnvTag}
 
 type sourced struct{ val, src string }
 

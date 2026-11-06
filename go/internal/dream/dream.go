@@ -315,7 +315,7 @@ func digests(ss []transcript.Session, budget int) string {
 // args confines claude to dir. Managed settings allow Write(*) and Edit(*), which beats --add-dir
 // and every permission mode, so the guard hook is what keeps each tool call inside dir.
 func (r *Runner) args(dir string) ([]string, error) {
-	guard := shellQuote(r.Self) + " dream guard " + shellQuote(dir)
+	guard := fsx.ShellQuote(r.Self) + " dream guard " + fsx.ShellQuote(dir)
 	settings, err := json.Marshal(map[string]any{
 		"outputStyle": "default",
 		"hooks": map[string]any{"PreToolUse": []any{map[string]any{"matcher": ".*",
@@ -328,8 +328,6 @@ func (r *Runner) args(dir string) ([]string, error) {
 		"--permission-mode", "acceptEdits", "--strict-mcp-config", "--no-session-persistence",
 		"--disable-slash-commands", "--settings", string(settings), "--output-format", "text"}, nil
 }
-
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // Guard answers the dream's PreToolUse hook: nil when the call stays inside dir, else the reason
 // to deny it. Anything it cannot parse is denied.

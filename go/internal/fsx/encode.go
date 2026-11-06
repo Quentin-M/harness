@@ -154,6 +154,9 @@ func pyNum(v any) string {
 	return fmt.Sprint(v)
 }
 
+// ShellQuote is s as one POSIX shell word.
+func ShellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
 // PyQuote is Python json.dumps of a string; ascii mirrors ensure_ascii.
 func PyQuote(s string, ascii bool) string {
 	var b strings.Builder

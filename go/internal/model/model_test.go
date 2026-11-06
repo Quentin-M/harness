@@ -1,6 +1,7 @@
 package model
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -74,6 +75,35 @@ func TestEnvOverridesManagedSettings(t *testing.T) {
 	if c.BaseURL != "https://env.example" || c.BaseSrc != "env ANTHROPIC_BASE_URL" || c.KeyCmd != "echo k" ||
 		c.KeySrc != "env HARNESS_KEY_CMD" {
 		t.Errorf("%+v", c)
+	}
+}
+
+// A base URL from one source and a mint URL from the other would mint a key for the wrong gateway.
+func TestKeyEnvPairComesFromTheBaseURLSource(t *testing.T) {
+	env := fixture(t)
+	write(t, filepath.Join(env["HARNESS_MANAGED_SETTINGS"], "90-canary.json"),
+		`{"env": {"ANTHROPIC_BASE_URL": "https://agw.example", "LITELLM_URL": "https://agw-mint.example"}}`)
+	managed := map[string]string{"ANTHROPIC_BASE_URL": "https://agw.example", "LITELLM_URL": "https://agw-mint.example",
+		KeyEnvTag: "managed"}
+	mine := map[string]string{"ANTHROPIC_BASE_URL": "https://mine.example", "LITELLM_URL": "https://mine-mint.example"}
+	for _, tc := range []struct {
+		name  string
+		shell map[string]string
+		want  map[string]string
+	}{
+		{"managed pair", nil, managed},
+		{"shell pair", mine, mine},
+		{"shell base alone", map[string]string{"ANTHROPIC_BASE_URL": "https://old.example"},
+			map[string]string{"ANTHROPIC_BASE_URL": "https://old.example"}},
+		{"shell mint alone", map[string]string{"LITELLM_URL": "https://stale-mint.example"}, managed},
+		{"pair a parent launch exported from managed", map[string]string{"ANTHROPIC_BASE_URL": "https://old.example",
+			"LITELLM_URL": "https://agw-mint.example", KeyEnvTag: "managed"}, managed},
+	} {
+		e := maps.Clone(env)
+		maps.Copy(e, tc.shell)
+		if c := load(t, e); !maps.Equal(c.KeyEnv, tc.want) {
+			t.Errorf("%s: KeyEnv = %v, want %v", tc.name, c.KeyEnv, tc.want)
+		}
 	}
 }
 

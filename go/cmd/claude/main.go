@@ -40,7 +40,7 @@ import (
 
 // dryRunKeys are the launch env vars a dry run reports, in order.
 var dryRunKeys = []string{"HOME", "PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_FORCE_IMAGE_PROTOCOL", "CLAUDE_CONFIG_DIR",
-	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL"}
+	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL", model.KeyEnvTag}
 
 var harnessFlags = map[string]string{"--claude": "claude", "--omp": "omp", "--codex": "codex",
 	"--opencode": "opencode", "--oc": "opencode"}
@@ -134,9 +134,12 @@ func launch(ctx *harness.Ctx, a args) error {
 	if !ok {
 		return fmt.Errorf("unknown harness %q", a.harness)
 	}
-	for k, v := range ctx.Models.KeyEnv {
-		if _, ok := ctx.Env.Lookup(k); !ok {
+	// KeyEnv already prefers the shell's pair; an inherited half pair must not reach the helper.
+	for _, k := range model.KeyEnvVars {
+		if v, ok := ctx.Models.KeyEnv[k]; ok {
 			ctx.Env.Set(k, v)
+		} else {
+			ctx.Env.Unset(k)
 		}
 	}
 	if err := h.Env(ctx); err != nil {

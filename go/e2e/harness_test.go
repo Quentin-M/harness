@@ -392,7 +392,7 @@ func TestGatewayConfigs(t *testing.T) {
 	f := newFixture(t)
 	f.run("sync")
 	p := get(readYAML(t, f.p("omp/agent/models.yml")), "providers", "gw").(map[string]any)
-	eq(t, p["apiKey"], "!gw-key", "apiKey")
+	eq(t, p["apiKey"], "!/usr/bin/env -u LITELLM_URL ANTHROPIC_BASE_URL='https://gw.example' gw-key", "apiKey")
 	eq(t, p["api"], "openai-responses", "api")
 	eq(t, p["disableStrictTools"], true, "disableStrictTools")
 	eq(t, p["baseUrl"], "https://gw.example/v1", "baseUrl")
@@ -447,8 +447,16 @@ func TestKeyHelperGetsTheGatewayEnv(t *testing.T) {
 		eq(t, envVal(out, "ANTHROPIC_BASE_URL"), "https://gw2.example", h+" ANTHROPIC_BASE_URL")
 		eq(t, envVal(out, "LITELLM_URL"), "https://mint.example", h+" LITELLM_URL")
 	}
-	out := f.launchEnv(map[string]string{"LITELLM_URL": "https://mine.example"}, "--omp")
-	eq(t, envVal(out, "LITELLM_URL"), "https://mine.example", "shell env wins")
+	out := f.launchEnv(map[string]string{"ANTHROPIC_BASE_URL": "https://mine.example", "LITELLM_URL": "https://mine-mint.example"}, "--omp")
+	eq(t, envVal(out, "LITELLM_URL"), "https://mine-mint.example", "shell pair wins")
+	out = f.launchEnv(map[string]string{"LITELLM_URL": "https://stale-mint.example"}, "--omp")
+	eq(t, envVal(out, "LITELLM_URL"), "https://mint.example", "a shell mint without its base yields to the managed pair")
+	eq(t, envVal(out, "HARNESS_KEY_ENV"), "managed", "managed pair is tagged")
+	nested := map[string]string{"ANTHROPIC_BASE_URL": "https://old.example", "LITELLM_URL": "https://old-mint.example",
+		"HARNESS_KEY_ENV": "managed"}
+	out = f.launchEnv(nested, "--omp")
+	eq(t, envVal(out, "ANTHROPIC_BASE_URL"), "https://gw2.example", "nested launch re-reads managed base")
+	eq(t, envVal(out, "LITELLM_URL"), "https://mint.example", "nested launch re-reads managed mint")
 }
 
 func TestBinaryResolutionSkipsHarnessShims(t *testing.T) {

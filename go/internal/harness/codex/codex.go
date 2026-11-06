@@ -125,11 +125,7 @@ var eventKeys = map[string]string{
 
 // memoryHook injects the project's Claude auto memory index at session start.
 func memoryHook(state string) claude.Hook {
-	return claude.Hook{Type: "command", Command: shellQuote(filepath.Join(state, "bin", "harness")) + " memory context", Timeout: 10}
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+	return claude.Hook{Type: "command", Command: fsx.ShellQuote(filepath.Join(state, "bin", "harness")) + " memory context", Timeout: 10}
 }
 
 // ownedHooks maps codex hook-state keys to trust hashes for the memory hook harness writes as the

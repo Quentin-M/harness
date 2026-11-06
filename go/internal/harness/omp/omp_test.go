@@ -2,6 +2,7 @@ package omp
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -118,8 +119,7 @@ func TestSyncGateway(t *testing.T) {
 		t.Errorf("memory = %v %v", cfg["memory"], cfg["mnemopi"])
 	}
 	p := readYAML(t, filepath.Join(d, "models.yml"))["providers"].(map[string]any)["gw"].(map[string]any)
-	if p["apiKey"] != "!gw-key" || p["api"] != "openai-responses" || p["disableStrictTools"] != true ||
-		p["baseUrl"] != "https://gw.example/v1" {
+	if p["api"] != "openai-responses" || p["disableStrictTools"] != true || p["baseUrl"] != "https://gw.example/v1" {
 		t.Errorf("provider = %v", p)
 	}
 	ids := []string{}
@@ -143,6 +143,34 @@ func TestSyncGateway(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d, "agents")); !os.IsNotExist(err) {
 		t.Error("agents dir generated")
+	}
+}
+
+// omp runs the apiKey command in a shell with its own env; the helper must still see the pair baseUrl came from.
+func TestKeyCmdRunsWithTheProviderPair(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "helper")
+	write(t, helper, "#!/bin/sh\necho \"$ANTHROPIC_BASE_URL|${LITELLM_URL-unset}\"\n", 0o755)
+	stale := []string{"PATH=/usr/bin:/bin", "ANTHROPIC_BASE_URL=https://stale.example", "LITELLM_URL=https://stale-mint.example"}
+	for _, tc := range []struct {
+		keyEnv map[string]string
+		want   string
+	}{
+		{map[string]string{"ANTHROPIC_BASE_URL": "https://gw.example", "LITELLM_URL": "https://mint.example"},
+			"https://gw.example|https://mint.example"},
+		{map[string]string{"ANTHROPIC_BASE_URL": "https://gw.example"}, "https://gw.example|unset"},
+	} {
+		m := gateway()
+		m.KeyCmd, m.KeyEnv = helper, tc.keyEnv
+		key := Providers(m)["gw"].(map[string]any)["apiKey"].(string)
+		cmd := exec.Command("/bin/sh", "-c", strings.TrimPrefix(key, "!"))
+		cmd.Env = stale
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		if got := strings.TrimSpace(string(out)); got != tc.want {
+			t.Errorf("%s printed %q, want %q", key, got, tc.want)
+		}
 	}
 }
 

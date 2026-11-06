@@ -54,7 +54,7 @@ func Providers(m *model.Config) map[string]any {
 	}
 	key := any("not-required")
 	if m.KeyCmd != "" {
-		key = "!" + m.KeyCmd
+		key = "!" + pinnedKeyCmd(m)
 	}
 	prov := fsx.OMap("baseUrl", m.OpenAIURL(), "apiKey", key, "api", api(str(m.Raw["api"], "openai")))
 	if b, _ := m.Raw["disable_strict_tools"].(bool); b {
@@ -75,6 +75,16 @@ func Providers(m *model.Config) map[string]any {
 	}
 	prov["models"] = models
 	return fsx.OMap(m.Provider(), prov)
+}
+
+// pinnedKeyCmd runs the key helper with the gateway pair baseUrl was built from, whatever env
+// the omp reading models.yml was started with.
+func pinnedKeyCmd(m *model.Config) string {
+	base := "ANTHROPIC_BASE_URL=" + fsx.ShellQuote(m.BaseURL)
+	if mint, ok := m.KeyEnv["LITELLM_URL"]; ok {
+		return "/usr/bin/env " + base + " LITELLM_URL=" + fsx.ShellQuote(mint) + " " + m.KeyCmd
+	}
+	return "/usr/bin/env -u LITELLM_URL " + base + " " + m.KeyCmd
 }
 
 func (H) Sync(ctx *harness.Ctx) error {
