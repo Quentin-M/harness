@@ -1,0 +1,34 @@
+---
+name: watup
+description: Catch Q up since their last message - done, left, and what needs them.
+---
+Catch Q up on everything since their last message to you. They have been away and hold none of the
+context. Use the i-have-adhd style: picture first, words as captions. This turn is read-only:
+gather and report, change nothing.
+
+"Their last message" is the last one Q wrote before `/watup`. Notifications and subagent results
+are not Q's messages. Name every PR, branch and agent the way Q knows it, never by a label you
+invented during the work.
+
+1. **Line 1:** the one thing that needs Q now, or "Nothing needs you." if nothing does. If nothing
+   happened and nothing waits on Q, say so and stop.
+2. **Progress bar:** `██████░░░░ N/M` over the whole task, then the task list with status glyphs
+   (`✓ ◐ ○ ✗ ⚠ ⏸`), one line per item.
+3. **Done:** what now works, concretely. Name commands to try, files changed (tree with
+   `+ ~ -`), PRs, verdicts. Show failures and skips too, ahead of the wins. Skip steps that
+   changed nothing.
+4. **Left:** what is still open, in order, with a real time estimate each.
+5. **Needs Q:** every decision or action only Q can take: a choice, an approval, an irreversible
+   step, access you lack. Include any still waiting from before Q's last message. Work you can do
+   yourself is Left, not Needs Q. For each one:
+   - the question in one line
+   - the context Q needs to answer it without scrolling back (a diagram if it has a shape)
+   - the options with one-line trade-offs, recommendation first
+   - what happens if Q does nothing
+
+Gather facts before writing: the conversation since Q's last message, `git status` / `git log`,
+open background tasks, `.pod/*/ledger.tsv` and `follow-ups.tsv` if a pod is running. Check the
+current state of each PR, CI run and agent the chat touched; say which are still running and which
+you could not check. Report only what you verified; mark anything inferred as inferred.
+
+$ARGUMENTS
