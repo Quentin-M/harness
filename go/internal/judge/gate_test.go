@@ -262,7 +262,8 @@ func TestPortFromEnv(t *testing.T) {
 	}
 }
 
-// Empty input runs nothing, so it is allowed without a judge call; bash's input.cwd wins over the session's.
+// Empty input runs nothing, so it is allowed without a judge call; bash's input.cwd is resolved
+// against the session's the way omp resolves it, so the judge sees the directory the command runs in.
 func TestGateEmptyInputAndInputCwd(t *testing.T) {
 	f := judgetest.New(t)
 	for _, req := range []judge.GateRequest{bashReq("  \n"), {Tool: "bash", Input: map[string]any{}}, evalReq("", "py")} {
@@ -273,11 +274,17 @@ func TestGateEmptyInputAndInputCwd(t *testing.T) {
 	if f.Server.Hits.Load() != 0 {
 		t.Fatal("empty input reached the judge")
 	}
-	req := bashReq("ls")
-	req.Input["cwd"] = "/elsewhere"
-	serve(t, newGate(f), req)
-	if a, _ := lastAudit(t, f); a.Cwd != "/elsewhere" {
-		t.Fatalf("audit %+v", a)
+	t.Setenv("HOME", "/home/q")
+	for in, want := range map[string]string{
+		"/elsewhere": "/elsewhere", "./build": "/work/app/build", "..": "/work", "../x/./y": "/work/x/y",
+		"~": "/home/q", "~/src": "/home/q/src", "/": "/work/app", "/a//b/": "/a/b",
+	} {
+		req := bashReq("ls")
+		req.Input["cwd"] = in
+		serve(t, newGate(f), req)
+		if a, _ := lastAudit(t, f); a.Cwd != want {
+			t.Errorf("input.cwd %q: judged in %q, want %q", in, a.Cwd, want)
+		}
 	}
 }
 

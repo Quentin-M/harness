@@ -44,6 +44,26 @@ const (
 		"Pick a safer approach, or ask the user in chat; a retried command is judged again and sees the user's reply."
 )
 
+// commandCwd resolves bash's input.cwd the way omp's resolveToCwd does, so the judge sees the
+// directory the command runs in: `~` expands, a relative path joins the session cwd, and a path of
+// only slashes means the session cwd.
+func commandCwd(dir, session string) string {
+	if home, err := os.UserHomeDir(); err == nil {
+		if dir == "~" {
+			dir = home
+		} else if rest, ok := strings.CutPrefix(dir, "~/"); ok {
+			dir = filepath.Join(home, rest)
+		}
+	}
+	switch {
+	case strings.Trim(dir, "/") == "":
+		return session
+	case filepath.IsAbs(dir):
+		return filepath.Clean(dir)
+	}
+	return filepath.Join(session, dir)
+}
+
 // GateRequest is the one JSON object `judge gate` reads on stdin: omp's tool name and raw tool
 // input, the session's working directory, and the user's latest typed messages. The gate picks the
 // command (bash: input.command, eval: input.code and input.language) and the working directory
@@ -147,7 +167,7 @@ func (g *Gate) decide(stdin io.Reader, c *call, start time.Time) verdict {
 		return bad("the %s input %q is not a string", req.Tool, field)
 	}
 	if d, ok := req.Input["cwd"].(string); ok && d != "" && req.Tool == "bash" {
-		c.cwd = d
+		c.cwd = commandCwd(d, req.Cwd)
 	}
 	if l, ok := req.Input["language"].(string); ok && req.Tool == "eval" {
 		c.language = l
