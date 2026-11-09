@@ -4,6 +4,7 @@ package judgetest
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,7 @@ type Server struct {
 	badShape bool
 	notJudge bool
 	delay    time.Duration
+	override map[string]any
 	last     []byte
 }
 
@@ -84,10 +86,26 @@ func (s *Server) SetNotJudge(v bool) { s.mu.Lock(); s.notJudge = v; s.mu.Unlock(
 // SetDelay makes decision requests slow, like a GPU shared with another job.
 func (s *Server) SetDelay(d time.Duration) { s.mu.Lock(); s.delay = d; s.mu.Unlock() }
 
+// SetAnswer replaces the default answer to question q in every decision reply; a nil answer
+// restores the default.
+func (s *Server) SetAnswer(q string, answer map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.override == nil {
+		s.override = map[string]any{}
+	}
+	if answer == nil {
+		delete(s.override, q)
+		return
+	}
+	s.override[q] = answer
+}
+
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.Hits.Add(1)
 	s.mu.Lock()
 	loaded, model, bad, notJudge, delay := s.loaded, s.model, s.badShape, s.notJudge, s.delay
+	override := maps.Clone(s.override)
 	s.mu.Unlock()
 	switch {
 	case r.URL.Path == "/health":
@@ -123,6 +141,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		answers := map[string]any{}
 		for id, q := range req.Questions {
 			switch {
+			case override[id] != nil:
+				answers[id] = override[id]
 			case bad:
 				answers[id] = map[string]any{"type": q.Type}
 			case q.Type == "noul":

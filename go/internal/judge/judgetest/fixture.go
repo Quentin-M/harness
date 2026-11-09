@@ -77,24 +77,23 @@ const GateJSON = `{"name":"jev-9b-ft-v3","questions":{
   "block":[{"q":"data_leaves_machine","label":"true","min":0.5},{"q":"untrusted_code","label":"true","min":0.1}]}}
 `
 
-// Fixture is a fully capable machine: Apple Silicon with 64 GiB, uv and bun installed, the plugin
-// checked out with its dependencies, the model downloaded, the v3 adapter trained and the server answering.
+// Fixture is a fully capable machine: Apple Silicon with 64 GiB, uv installed, the gate extension
+// checked out, the model downloaded, the v3 adapter trained and the server answering.
 type Fixture struct {
-	Local    *judge.Local
-	Server   *Server
-	Runner   *Runner
-	Log      *bytes.Buffer
-	Root     string
-	State    string
-	Home     string
-	Plugin   string
-	ModelDir string
-	Work     string // JUDGE_FT_WORK
-	Adapter  string // trained adapter dir
-	Gate     string // gate battery file
-	UV       string
-	Bun      string
-	Clock    *Clock
+	Local     *judge.Local
+	Server    *Server
+	Runner    *Runner
+	Log       *bytes.Buffer
+	Root      string
+	State     string
+	Home      string
+	Extension string // the omp extension file
+	ModelDir  string
+	Work      string // JUDGE_FT_WORK
+	Adapter   string // trained adapter dir
+	Gate      string // gate battery file
+	UV        string
+	Clock     *Clock
 }
 
 // Clock is the real clock plus an offset a test can advance, so waits stay real and the
@@ -127,11 +126,8 @@ func New(t *testing.T) *Fixture {
 	f := &Fixture{Server: NewServer(t), Runner: &Runner{}, Log: &bytes.Buffer{},
 		Root: filepath.Join(tmp, "root"), State: filepath.Join(tmp, "state"), Home: filepath.Join(tmp, "home"),
 		Clock: &Clock{}}
-	f.Plugin = filepath.Join(f.Root, "vendors", "omp-classifier")
-	write(t, filepath.Join(f.Plugin, "index.ts"), "export default () => {}\n", 0o644)
-	for _, d := range []string{"mvdan-sh", "tldts"} {
-		write(t, filepath.Join(f.Plugin, "node_modules", d, "package.json"), "{}\n", 0o644)
-	}
+	f.Extension = judge.ExtensionPathIn(f.Root)
+	write(t, f.Extension, "export default () => {}\n", 0o644)
 	f.Work = filepath.Join(f.State, "judge", "ft")
 	f.ModelDir = filepath.Join(f.Work, "models", "JEV-9B-MLX-NVFP4")
 	f.Adapter = filepath.Join(f.Work, "runs", "v3")
@@ -143,11 +139,9 @@ func New(t *testing.T) *Fixture {
 	write(t, filepath.Join(f.ModelDir, "config.json"), "{}\n", 0o644)
 	write(t, filepath.Join(f.ModelDir, "model-00001-of-00002.safetensors"), "w\n", 0o644)
 	f.UV = filepath.Join(tmp, "bin", "uv")
-	f.Bun = filepath.Join(tmp, "bin", "bun")
 	write(t, f.UV, "#!/bin/sh\n", 0o755)
-	write(t, f.Bun, "#!/bin/sh\n", 0o755)
 	env := sys.Env{"PATH": filepath.Join(tmp, "bin") + ":/usr/bin:/bin", "HOME": f.Home, "HARNESS_UV_BIN": f.UV,
-		"HARNESS_BUN_BIN": f.Bun, "ANTHROPIC_AUTH_TOKEN": "gateway-secret"}
+		"ANTHROPIC_AUTH_TOKEN": "gateway-secret"}
 	f.Local = &judge.Local{
 		Host: judge.Host{OS: "darwin", Arch: "arm64", Memory: 64 << 30},
 		Sys:  &sys.Sys{Env: env, Home: f.Home}, Root: f.Root, State: f.State, Self: "/bin/harness",

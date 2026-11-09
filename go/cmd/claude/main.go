@@ -8,6 +8,7 @@
 //	claude dream guard <dir>       (the dream's PreToolUse hook: exit 2 on a tool call outside dir)
 //	claude judge fetch             (download the judge's base model and published adapter, in the foreground)
 //	claude judge train [--force]   (rebuild the v3 adapter locally, about 75 min on the GPU; refuses to replace one without --force)
+//	claude judge gate [--status on|off]   (the omp extension's command gate: one JSON request on stdin, one {block, reason} on stdout; --status prints the /classifier text)
 //	claude judge bench run --endpoint URL --model ID --battery FILE [--corpus PATH]...   (score a judge on bench/judge)
 //	claude judge bench compare <report.json>...   (side-by-side markdown of bench reports)
 //
@@ -30,6 +31,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -57,7 +59,7 @@ import (
 // dryRunKeys are the launch env vars a dry run reports, in order.
 var dryRunKeys = []string{"HOME", "PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_FORCE_IMAGE_PROTOCOL", "CLAUDE_CONFIG_DIR",
 	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL", model.KeyEnvTag,
-	judge.ConfigEnv, judge.KeyEnv}
+	judge.GateEnv}
 
 var harnessFlags = map[string]string{"--claude": "claude", "--omp": "omp", "--codex": "codex",
 	"--opencode": "opencode", "--oc": "opencode"}
@@ -206,7 +208,7 @@ func launch(ctx *harness.Ctx, a args) error {
 }
 
 // judgeCmd runs `judge fetch`, which a launch spawns detached when the judge model is missing,
-// and `judge bench`, which scores a decision model against the labeled corpus in bench/judge.
+// `judge gate`, which the omp extension spawns for every bash and eval call, and `judge bench`, which scores a decision model against the labeled corpus in bench/judge.
 func judgeCmd(env sys.Env, argv []string) error {
 	if len(argv) >= 1 && (argv[0] == "fetch" || argv[0] == "train") {
 		force := len(argv) == 2 && argv[0] == "train" && argv[1] == "--force"
@@ -222,6 +224,23 @@ func judgeCmd(env sys.Env, argv []string) error {
 		}
 		return judge.Train(sys.New(env), root, stateDir(env), force, os.Stdout)
 	}
+	if len(argv) >= 1 && argv[0] == "gate" {
+		root, err := harnessRoot(env)
+		g := &judge.Gate{Root: root, State: stateDir(env), Port: judge.PortFrom(env), HTTP: &http.Client{}}
+		if len(argv) == 3 && argv[1] == "--status" && (argv[2] == "on" || argv[2] == "off") {
+			fmt.Println(g.Status(argv[2]))
+			return nil
+		}
+		if len(argv) != 1 {
+			return errors.New("usage: judge gate [--status on|off]")
+		}
+		if err != nil {
+			// still one JSON reply: the extension refuses the call with this reason
+			return json.NewEncoder(os.Stdout).Encode(judge.GateReply{Block: true,
+				Reason: "Blocked by the local command gate: " + err.Error()})
+		}
+		return g.Serve(os.Stdin, os.Stdout)
+	}
 	if len(argv) >= 1 && argv[0] == "bench" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -231,9 +250,9 @@ func judgeCmd(env sys.Env, argv []string) error {
 			root = resolve(expand(r, env))
 		}
 		return bench.Main(ctx, argv[1:], bench.Env{State: stateDir(env), Root: root, Cwd: cwd,
-			Key: env.Get(judge.KeyEnv), Now: time.Now, Stdout: os.Stdout, Stderr: os.Stderr})
+			Key: env.Get(bench.KeyEnv), Now: time.Now, Stdout: os.Stdout, Stderr: os.Stderr})
 	}
-	return errors.New("usage: judge fetch | judge train [--force] | judge bench run|compare ...")
+	return errors.New("usage: judge fetch | judge train [--force] | judge gate | judge bench run|compare ...")
 }
 
 // diagrams lints every diagram in the named markdown files and fails when any has an issue.

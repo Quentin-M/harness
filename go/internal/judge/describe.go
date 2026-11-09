@@ -24,15 +24,15 @@ func (l *Local) Describe() [][2]string {
 	if !l.adapterPresent() {
 		adapter = "MISSING (a launch downloads memtalow/jev-9b-ft-v3, or run `claude judge fetch`)"
 	}
-	deps := "installed"
-	if !l.depsPresent() {
-		deps = "not installed (a launch runs bun install)"
+	extension := "present"
+	if !isFile(l.ExtensionPath()) {
+		extension = "MISSING"
 	}
 	return append(rows,
 		[2]string{"judge model", ModelName + " in " + l.modelDir() + ": " + model},
 		[2]string{"judge adapter", ModelID + " in " + l.adapterDir() + ": " + adapter},
 		[2]string{"judge gate", l.GatePath()},
-		[2]string{"judge plugin", l.PluginDir() + ": deps " + deps},
-		[2]string{"judge config", ConfigPath(l.State)},
+		[2]string{"judge extension", l.ExtensionPath() + ": " + extension},
+		[2]string{"judge audit log", AuditPath(l.State)},
 		[2]string{"judge logs", l.dir("")})
 }

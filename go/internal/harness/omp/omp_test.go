@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -456,10 +457,10 @@ func TestArgvLoadsTheClassifierForAProvenJudge(t *testing.T) {
 		t.Fatal(err)
 	}
 	bin := filepath.Join(ctx.Cwd, "bin", "omp")
-	if want := []string{bin, "--model", "gw/rev", "-e", j.Plugin, "hello"}; !slices.Equal(got, want) {
+	if want := []string{bin, "--model", "gw/rev", "-e", j.Extension, "hello"}; !slices.Equal(got, want) {
 		t.Fatalf("argv = %v, want %v", got, want)
 	}
-	if ctx.Env[judge.ConfigEnv] != judge.ConfigPath(j.State) || ctx.Env[judge.KeyEnv] == "" {
+	if ctx.Env[judge.GateEnv] != "/bin/harness" || ctx.Env["HARNESS_JUDGE_PORT"] != strconv.Itoa(j.Server.Port) {
 		t.Fatalf("env = %v", ctx.Env)
 	}
 }
@@ -480,12 +481,12 @@ func TestArgvYoloSkipsTheClassifier(t *testing.T) {
 	if j.Server.Hits.Load() != 0 || j.Runner.Calls() != 0 {
 		t.Fatalf("yolo probed or started the judge: hits %d calls %d", j.Server.Hits.Load(), j.Runner.Calls())
 	}
-	if _, ok := ctx.Env[judge.ConfigEnv]; ok {
+	if _, ok := ctx.Env[judge.GateEnv]; ok {
 		t.Fatal("classifier env set under --yolo")
 	}
 }
 
-// An unproven judge, or none at all, must leave omp exactly as it was: the plugin fails closed.
+// An unproven judge, or none at all, must leave omp exactly as it was: the gate fails closed.
 func TestArgvWithoutAProvenJudgeIsVanilla(t *testing.T) {
 	cases := map[string]func(ctx *harness.Ctx, j *judgetest.Fixture){
 		"linux":      func(_ *harness.Ctx, j *judgetest.Fixture) { j.Local.Host.OS = "linux" },
@@ -500,7 +501,7 @@ func TestArgvWithoutAProvenJudgeIsVanilla(t *testing.T) {
 			j := judgetest.New(t)
 			ctx.Judge = j.Local
 			setup(ctx, j)
-			ctx.Env[judge.ConfigEnv], ctx.Env[judge.KeyEnv] = "/stale/omp-classifier.json", "stale" // a shell's own
+			ctx.Env[judge.GateEnv] = "/stale/harness" // a shell's own
 			if err := (H{}).Env(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -512,10 +513,8 @@ func TestArgvWithoutAProvenJudgeIsVanilla(t *testing.T) {
 			if want := []string{bin, "--model", "gw/rev", "hello"}; !slices.Equal(got, want) {
 				t.Fatalf("argv = %v, want vanilla %v", got, want)
 			}
-			for _, k := range []string{judge.ConfigEnv, judge.KeyEnv} {
-				if _, ok := ctx.Env[k]; ok {
-					t.Fatalf("%s leaked into a classifier-free launch", k)
-				}
+			if _, ok := ctx.Env[judge.GateEnv]; ok {
+				t.Fatalf("%s leaked into a classifier-free launch", judge.GateEnv)
 			}
 		})
 	}

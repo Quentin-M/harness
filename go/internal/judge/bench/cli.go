@@ -19,7 +19,7 @@ type Env struct {
 	State  string // $HARNESS_STATE; the cache lives in State/judge/bench-cache
 	Root   string // harness checkout, base of the default bench/judge paths and fallback for relative ones; may be ""
 	Cwd    string
-	Key    string // Bearer key for the endpoint, from HARNESS_JUDGE_KEY; none is sent when empty
+	Key    string // Bearer key for the endpoint, from KeyEnv; none is sent when empty
 	Now    func() time.Time
 	Stdout io.Writer
 	Stderr io.Writer
@@ -34,6 +34,9 @@ type multi []string
 
 func (m *multi) String() string     { return strings.Join(*m, ",") }
 func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
+
+// KeyEnv names the env var holding the Bearer key for a remote endpoint under `judge bench run`.
+const KeyEnv = "HARNESS_JUDGE_KEY"
 
 // Main runs `judge bench <run|compare>`.
 func Main(ctx context.Context, argv []string, e Env) error {

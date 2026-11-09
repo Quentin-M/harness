@@ -173,9 +173,8 @@ func readConfig(path string) (map[string]any, error) {
 func (H) Env(ctx *harness.Ctx) error {
 	delete(ctx.Env, "OMP_PROFILE")
 	delete(ctx.Env, "PI_PROFILE")
-	// Only a launch whose judge just answered carries these; a shell's own never reaches omp.
-	delete(ctx.Env, judge.ConfigEnv)
-	delete(ctx.Env, judge.KeyEnv)
+	// Only a launch whose judge just answered carries this; a shell's own never reaches omp.
+	delete(ctx.Env, judge.GateEnv)
 	ctx.Env["PI_CODING_AGENT_DIR"] = AgentDir(ctx.State)
 	rel, err := filepath.Rel(ctx.Sys.Home, filepath.Join(ctx.State, "omp"))
 	if err != nil {
@@ -212,9 +211,9 @@ func (H) Argv(ctx *harness.Ctx, mdl string, args []string) ([]string, error) {
 	return append(argv, rest...), nil
 }
 
-// classifierArgs loads omp-classifier through -e when the local judge has just answered a real
-// decision request, and sets the env the plugin reads. Any other outcome is vanilla omp: the
-// plugin fails closed on a dead judge, so it is never loaded on hope.
+// classifierArgs loads the command-gate extension through -e when the local judge has just answered
+// a real decision request, and sets the env the gate reads. Any other outcome is vanilla omp: the
+// gate fails closed on a dead judge, so it is never loaded on hope.
 func classifierArgs(ctx *harness.Ctx) []string {
 	if ctx.Judge == nil {
 		return nil

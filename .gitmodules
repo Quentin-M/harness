@@ -2,7 +2,3 @@
 	path = vendors/omp
 	url = git@github.com:Quentin-M/oh-my-pi.git
 	branch = qmachu
-[submodule "vendors/omp-classifier"]
-	path = vendors/omp-classifier
-	url = git@github.com:Quentin-M/omp-classifier.git
-	branch = qmachu

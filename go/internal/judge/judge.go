@@ -1,7 +1,8 @@
-// Package judge decides whether a launch gets omp-classifier, and proves its local judge works first.
+// Package judge decides whether a launch gets the command gate, proves its local judge works first,
+// and is the gate itself (`claude judge gate`).
 //
-// omp-classifier blocks every bash call when its judge cannot answer, so the classifier is only
-// wired in when the fine-tuned judge on loopback has just answered the gate battery's real
+// The gate blocks every bash and eval call when its judge cannot answer, so the extension is only
+// loaded when the fine-tuned judge on loopback has just answered the gate battery's real
 // questions. Anything less (wrong host, missing runtime, model still downloading, adapter not
 // trained, server not ready) means no classifier, which is omp's default, and the launch goes on.
 package judge
@@ -32,22 +33,18 @@ const (
 	AdapterRun = "v3"
 	// DefaultPort is the loopback port of the shared judge server.
 	DefaultPort = 11436
-	// KeyEnv names the env var the plugin sends as the Bearer key. The adapter server skips auth on
-	// loopback, so the value is a placeholder, but the plugin refuses an endpoint whose key var is unset.
-	KeyEnv   = "HARNESS_JUDGE_KEY"
+	// keyValue is the placeholder Bearer key of the probe; the adapter server skips auth on loopback.
 	keyValue = "loopback"
-	// ConfigEnv points the plugin at the harness-owned config file, whatever XDG or profile says.
-	ConfigEnv = "OMP_JEV_CONFIG"
 
 	// MinMemory is the RAM a Mac needs to keep the 9B NVFP4 model resident next to an agent session.
 	MinMemory = 32 << 30
-	// ReadyBudget bounds everything a launch waits for: the lock, bun install and a cold model load.
+	// ReadyBudget bounds everything a launch waits for: the lock and a cold model load.
 	ReadyBudget = 30 * time.Second
-	// ProbeTimeout is the plugin's own default classification budget: a judge slower than this
-	// would fail closed on its first real command.
+	// ProbeTimeout is the extension's own timeout per decision: a judge slower than this would
+	// fail closed on its first real command.
 	ProbeTimeout = 8 * time.Second
-	// ProbeFast is the longest a battery-sized request may take on a loaded model: the plugin
-	// aborts a classification at 8 s, and its two requests run in parallel.
+	// ProbeFast is the longest a battery-sized request may take on a loaded model: a decision
+	// is cut off at GateBudget, and the request carries user messages and a command on top.
 	ProbeFast = 5 * time.Second
 	// FetchGap spaces download attempts across launches.
 	FetchGap = time.Hour
@@ -56,7 +53,6 @@ const (
 	IdleExit = 6 * time.Hour
 
 	pollEvery = 250 * time.Millisecond
-	depsTime  = 60 * time.Second
 )
 
 // Runner starts processes. The real one execs; tests record and fake the server coming up.
@@ -71,7 +67,7 @@ type Runner interface {
 type Local struct {
 	Host   Host
 	Sys    *sys.Sys
-	Root   string // harness checkout: the plugin lives in Root/vendors/omp-classifier
+	Root   string // harness checkout: the gate battery, extension and adapter script live under it
 	State  string
 	Self   string // harness binary, which serves `judge fetch`
 	Off    bool   // HARNESS_JUDGE=off
@@ -89,14 +85,17 @@ type Local struct {
 	Log      io.Writer     // one-line notes about transient reasons (download running, server slow)
 }
 
+// PortFrom is the judge's loopback port: HARNESS_JUDGE_PORT when it is a valid port, else DefaultPort.
+func PortFrom(env sys.Env) int {
+	if n, err := strconv.Atoi(env.Get("HARNESS_JUDGE_PORT")); err == nil && n > 0 && n < 65536 {
+		return n
+	}
+	return DefaultPort
+}
+
 // New builds the real Local for a launch from the environment in s.
 func New(s *sys.Sys, root, state string, dryRun bool, log io.Writer) *Local {
-	port := DefaultPort
-	if v := s.Env.Get("HARNESS_JUDGE_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 65536 {
-			port = n
-		}
-	}
+	port := PortFrom(s.Env)
 	self := s.Self
 	if self == "" {
 		self, _ = os.Executable()
@@ -115,17 +114,13 @@ type Outcome struct {
 	// later launch can fix on its own, and they get a note on stderr.
 	Reason    string
 	Transient bool
-	// Extension is the plugin directory for omp's -e flag; Env is added to the launch env.
+	// Extension is the file for omp's -e flag; Env is added to the launch env.
 	Extension string
 	Env       map[string]string
 }
 
-func (l *Local) PluginDir() string { return filepath.Join(l.Root, "vendors", "omp-classifier") }
-
-// ConfigPath is the plugin's omp-classifier.json. Its directory also receives the plugin's audit log.
-func ConfigPath(state string) string {
-	return filepath.Join(state, "omp", "omp-classifier", "omp-classifier.json")
-}
+// ExtensionPath is the omp extension that forwards bash and eval calls to `judge gate`.
+func (l *Local) ExtensionPath() string { return ExtensionPathIn(l.Root) }
 
 func (l *Local) dir(name string) string { return filepath.Join(l.State, "judge", name) }
 
@@ -156,10 +151,8 @@ func (l *Local) adapterScript() string {
 	return filepath.Join(l.Root, "bench", "judge", "adapters", "jev_systemone.py")
 }
 
-// GatePath is the battery the plugin decides by (its `battery` config key) and the probe asks.
-func (l *Local) GatePath() string {
-	return filepath.Join(l.Root, "bench", "judge", "gates", ModelID+".json")
-}
+// GatePath is the battery the gate decides by and the probe asks.
+func (l *Local) GatePath() string { return GatePathIn(l.Root) }
 
 func (l *Local) baseURL() string { return "http://127.0.0.1:" + strconv.Itoa(l.Port) }
 
@@ -197,14 +190,11 @@ func (l *Local) static() (reason, bin string) {
 	if bin == "" {
 		return "uv not installed", ""
 	}
-	if !isFile(filepath.Join(l.PluginDir(), "index.ts")) {
-		return "vendors/omp-classifier is not checked out", ""
-	}
-	if !l.depsPresent() && l.bin("bun") == "" {
-		return "bun not installed, plugin dependencies missing", ""
-	}
 	if _, err := l.loadGate(); err != nil {
 		return err.Error(), ""
+	}
+	if !isFile(l.ExtensionPath()) {
+		return "extension " + l.ExtensionPath() + " is missing", ""
 	}
 	return "", bin
 }
@@ -230,16 +220,11 @@ func (l *Local) Prepare() Outcome {
 		return no(reason)
 	}
 	model, err := l.ready(l.Timeout)
-	if err != nil || l.depsPresent() {
-		if o, done := l.conclude(model, err); done {
-			return o
-		}
+	if o, done := l.conclude(model, err); done {
+		return o
 	}
 	if l.DryRun {
-		if err == nil {
-			err = errors.New("plugin dependencies are not installed")
-		}
-		return l.soon("not ready (%v; a dry run starts and installs nothing)", err)
+		return l.soon("not ready (%v; a dry run starts nothing)", err)
 	}
 	deadline := l.Now().Add(l.Budget)
 	lock, lockErr := lockUntil(l.dir("start.lock"), deadline, l.Now)
@@ -247,12 +232,6 @@ func (l *Local) Prepare() Outcome {
 		return l.soon("another launch is still starting it")
 	}
 	defer lock.Close()
-	if !l.depsPresent() {
-		if err := l.Runner.Run(l.PluginDir(), min(depsTime, deadline.Sub(l.Now())), l.bin("bun"),
-			"install", "--frozen-lockfile", "--production"); err != nil || !l.depsPresent() {
-			return l.soon("plugin dependencies did not install (%v)", err)
-		}
-	}
 	// a concurrent launch may have started it while we waited
 	model, err = l.ready(l.Timeout)
 	if o, done := l.conclude(model, err); done {
@@ -290,24 +269,15 @@ func (l *Local) Prepare() Outcome {
 		l.Budget, err, l.dir("server.log"))
 }
 
-// enable wires the plugin: it owns judgeBackend, battery and hardBlocks in the config and nothing else.
+// enable wires the gate: the extension for -e, and the env it and `judge gate` read. HARNESS_ROOT,
+// HARNESS_STATE and HARNESS_JUDGE_PORT pin the gate to the checkout, state dir and server this
+// launch just probed, whatever the session's own shell says.
 func (l *Local) enable(model string) Outcome {
-	if err := l.syncConfig(model); err != nil {
-		return l.soon("%v", err)
-	}
 	return Outcome{
-		Ready: true, Reason: model + " on " + l.baseURL(), Extension: l.PluginDir(),
-		Env: map[string]string{ConfigEnv: ConfigPath(l.State), KeyEnv: keyValue},
+		Ready: true, Reason: model + " on " + l.baseURL(), Extension: l.ExtensionPath(),
+		Env: map[string]string{GateEnv: l.Self, "HARNESS_ROOT": l.Root, "HARNESS_STATE": l.State,
+			"HARNESS_JUDGE_PORT": strconv.Itoa(l.Port)},
 	}
-}
-
-func (l *Local) depsPresent() bool {
-	for _, d := range []string{"mvdan-sh", "tldts"} {
-		if !isFile(filepath.Join(l.PluginDir(), "node_modules", d, "package.json")) {
-			return false
-		}
-	}
-	return true
 }
 
 // ServeArgs is the uv command line of the adapter server. The script binds 127.0.0.1 only, after

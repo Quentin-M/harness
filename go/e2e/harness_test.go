@@ -900,51 +900,40 @@ func TestDreamGuardExitCodes(t *testing.T) {
 	}
 }
 
-// classifierFixture is a launch on a capable Mac: plugin checked out with its dependencies, uv
-// installed, the gate battery committed, and a judge answering on the port the launch is told to use.
-func classifierFixture(t *testing.T, f *fixture) (plugin string, env map[string]string, srv *judgetest.Server) {
+// classifierFixture is a launch on a capable Mac: the gate extension checked out, uv installed, the
+// gate battery committed, and a judge answering on the port the launch is told to use.
+func classifierFixture(t *testing.T, f *fixture) (extension string, env map[string]string, srv *judgetest.Server) {
 	t.Helper()
-	plugin = filepath.Join(f.root, "vendors", "omp-classifier")
-	write(t, plugin+"/index.ts", "export default () => {}\n")
-	write(t, plugin+"/node_modules/mvdan-sh/package.json", "{}\n")
-	write(t, plugin+"/node_modules/tldts/package.json", "{}\n")
+	extension = filepath.Join(f.root, "bench", "judge", "extension", "gate.ts")
+	write(t, extension, "export default () => {}\n")
 	write(t, f.root+"/bench/judge/gates/jev-9b-ft-v3.json", judgetest.GateJSON)
 	uv := filepath.Join(f.tmp, "bin", "uv")
 	write(t, uv, "#!/bin/sh\nexit 1\n")
 	must(t, os.Chmod(uv, 0o755))
 	srv = judgetest.NewServer(t)
-	return plugin, map[string]string{"HARNESS_JUDGE_HOST": "darwin/arm64/64", "HARNESS_JUDGE_PORT": fmt.Sprint(srv.Port),
+	return extension, map[string]string{"HARNESS_JUDGE_HOST": "darwin/arm64/64", "HARNESS_JUDGE_PORT": fmt.Sprint(srv.Port),
 		"HARNESS_UV_BIN": uv}, srv
 }
 
 func TestOmpLaunchLoadsTheClassifierWhenTheJudgeAnswers(t *testing.T) {
 	f := newFixture(t)
-	plugin, env, _ := classifierFixture(t, f)
+	extension, env, _ := classifierFixture(t, f)
+	env["HARNESS_JUDGE_GATE"] = "/stale/shell/harness" // a shell's own never reaches omp
 	out := f.launchEnv(env, "--omp", "--model", "review", "hello")
-	eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "--model", "gw/rev", "-e", plugin, "hello"}, "argv")
-	cfgPath := f.p("omp/omp-classifier/omp-classifier.json")
-	eq(t, envVal(out, "OMP_JEV_CONFIG"), cfgPath, "OMP_JEV_CONFIG")
-	eq(t, envVal(out, "HARNESS_JUDGE_KEY") != "<nil>", true, "judge key set")
-	cfg := readJSON(t, cfgPath)
-	backend := get(cfg, "judgeBackend")
-	eq(t, get(backend, "kind"), "endpoint", "backend kind")
-	eq(t, get(backend, "baseUrl"), "http://127.0.0.1:"+env["HARNESS_JUDGE_PORT"], "backend url")
-	eq(t, get(backend, "model"), "jev-9b-ft-v3", "backend model")
-	eq(t, get(backend, "apiKeyEnv"), "HARNESS_JUDGE_KEY", "backend key env")
-	eq(t, get(cfg, "battery"), f.root+"/bench/judge/gates/jev-9b-ft-v3.json", "battery")
-	eq(t, get(cfg, "hardBlocks"), false, "hardBlocks")
+	eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "--model", "gw/rev", "-e", extension, "hello"}, "argv")
+	eq(t, envVal(out, "HARNESS_JUDGE_GATE") != "<nil>" && envVal(out, "HARNESS_JUDGE_GATE") != "/stale/shell/harness", true, "gate binary set by the launcher")
+	eq(t, filepath.IsAbs(envVal(out, "HARNESS_JUDGE_GATE")), true, "gate binary is absolute")
 	contains(t, f.runEnv(env, "--omp", "doctor"), "on: jev-9b-ft-v3", "doctor classifier row")
+	contains(t, f.runEnv(env, "--omp", "doctor"), "judge audit log", "doctor audit row")
 }
 
-// --yolo is no classifier at all: nothing probed, no plugin, no config, omp's own no-prompt mode.
+// --yolo is no classifier at all: nothing probed, no extension, omp's own no-prompt mode.
 func TestYoloLaunchSkipsTheClassifierEntirely(t *testing.T) {
 	f := newFixture(t)
 	_, env, srv := classifierFixture(t, f)
 	out := f.launchEnv(env, "--omp", "--yolo", "--model", "review", "hello")
 	eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "--model", "gw/rev", "--approval-mode=yolo", "hello"}, "argv")
-	eq(t, envVal(out, "OMP_JEV_CONFIG"), "<nil>", "OMP_JEV_CONFIG")
-	eq(t, envVal(out, "HARNESS_JUDGE_KEY"), "<nil>", "judge key")
-	eq(t, exists(f.p("omp/omp-classifier/omp-classifier.json")), false, "config written")
+	eq(t, envVal(out, "HARNESS_JUDGE_GATE"), "<nil>", "gate env")
 	eq(t, srv.Hits.Load(), int64(0), "judge requests")
 	// the flag order among launcher flags does not matter
 	out = f.launchEnv(env, "--yolo", "--omp", "hello")
@@ -989,9 +978,7 @@ func TestOmpLaunchIsVanillaWhenTheHostCannotRunTheJudge(t *testing.T) {
 			}
 			out := f.launchEnv(env, "--omp", "--model", "review", "hello")
 			eq(t, out.Argv, []string{filepath.Join(f.tmp, "bin/omp"), "--model", "gw/rev", "hello"}, "argv")
-			eq(t, envVal(out, "OMP_JEV_CONFIG"), "<nil>", "OMP_JEV_CONFIG")
-			eq(t, envVal(out, "HARNESS_JUDGE_KEY"), "<nil>", "judge key")
-			eq(t, exists(f.p("omp/omp-classifier/omp-classifier.json")), false, "config written")
+			eq(t, envVal(out, "HARNESS_JUDGE_GATE"), "<nil>", "gate env")
 		})
 	}
 }

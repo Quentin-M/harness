@@ -3,6 +3,7 @@ package judge_test
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,19 +18,6 @@ import (
 	"github.com/Quentin-M/harness/internal/sys"
 )
 
-func readConfig(t *testing.T, f *judgetest.Fixture) map[string]any {
-	t.Helper()
-	b, err := os.ReadFile(judge.ConfigPath(f.State))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
-
 func writeFile(t *testing.T, p, text string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -42,26 +30,19 @@ func writeFile(t *testing.T, p, text string) {
 
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 
-func TestReadyJudgeWiresThePlugin(t *testing.T) {
+func TestReadyJudgeWiresTheGate(t *testing.T) {
 	f := judgetest.New(t)
 	o := f.Local.Prepare()
 	if !o.Ready {
 		t.Fatalf("not ready: %+v", o)
 	}
-	if o.Extension != f.Plugin {
-		t.Fatalf("extension %q, want %q", o.Extension, f.Plugin)
+	if o.Extension != f.Extension || !strings.HasSuffix(o.Extension, "bench/judge/extension/gate.ts") {
+		t.Fatalf("extension %q, want %q", o.Extension, f.Extension)
 	}
-	if o.Env[judge.ConfigEnv] != judge.ConfigPath(f.State) || o.Env[judge.KeyEnv] == "" {
-		t.Fatalf("env %v", o.Env)
-	}
-	got := readConfig(t, f)["judgeBackend"]
-	want := map[string]any{"kind": "endpoint", "baseUrl": "http://127.0.0.1:" + itoa(f.Server.Port),
-		"model": "jev-9b-ft-v3", "apiKeyEnv": judge.KeyEnv}
-	if !jsonEqual(got, want) {
-		t.Fatalf("judgeBackend %v, want %v", got, want)
-	}
-	if cfg := readConfig(t, f); cfg["battery"] != f.Gate || cfg["hardBlocks"] != false {
-		t.Fatalf("battery %v, hardBlocks %v", cfg["battery"], cfg["hardBlocks"])
+	want := map[string]string{judge.GateEnv: "/bin/harness", "HARNESS_ROOT": f.Root, "HARNESS_STATE": f.State,
+		"HARNESS_JUDGE_PORT": itoa(f.Server.Port)}
+	if !maps.Equal(o.Env, want) {
+		t.Fatalf("env %v, want %v", o.Env, want)
 	}
 	if f.Runner.Calls() != 0 {
 		t.Fatalf("a ready judge must start nothing: %+v", f.Runner)
@@ -89,11 +70,7 @@ func TestIncapableLaunchesNothing(t *testing.T) {
 		{"opted out", func(f *judgetest.Fixture) { f.Local.Off = true }, "HARNESS_JUDGE=off"},
 		{"no uv", func(f *judgetest.Fixture) { f.Local.Sys.Env["HARNESS_UV_BIN"] = "/nonexistent/uv" }, "uv not installed"},
 		{"no gate battery", func(f *judgetest.Fixture) { os.Remove(f.Gate) }, "gate battery"},
-		{"plugin not checked out", func(f *judgetest.Fixture) { os.Remove(filepath.Join(f.Plugin, "index.ts")) }, "not checked out"},
-		{"no bun and no deps", func(f *judgetest.Fixture) {
-			os.RemoveAll(filepath.Join(f.Plugin, "node_modules"))
-			f.Local.Sys.Env["HARNESS_BUN_BIN"] = "/nonexistent/bun"
-		}, "bun not installed"},
+		{"no extension", func(f *judgetest.Fixture) { os.Remove(f.Extension) }, "extension"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -106,15 +83,15 @@ func TestIncapableLaunchesNothing(t *testing.T) {
 			if f.Runner.Calls() != 0 || f.Server.Hits.Load() != 0 {
 				t.Fatalf("incapable launch touched the world: calls=%d hits=%d", f.Runner.Calls(), f.Server.Hits.Load())
 			}
-			if exists(judge.ConfigPath(f.State)) || f.Log.Len() != 0 {
-				t.Fatalf("incapable launch wrote config or noise: %q", f.Log.String())
+			if f.Log.Len() != 0 {
+				t.Fatalf("incapable launch made noise: %q", f.Log.String())
 			}
 		})
 	}
 }
 
-// The adapter server answers /health before any model is loaded, and a cold load outlasts the plugin's
-// 8 s budget: only a decision request that returns a typed answer proves the judge.
+// The adapter server answers /health before any model is loaded, and a cold load outlasts the gate's
+// budget: only a decision request that returns a typed answer proves the judge.
 func TestHealthAloneIsNotReadiness(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -132,9 +109,6 @@ func TestHealthAloneIsNotReadiness(t *testing.T) {
 			o := f.Local.Prepare()
 			if o.Ready || !o.Transient {
 				t.Fatalf("outcome %+v", o)
-			}
-			if exists(judge.ConfigPath(f.State)) {
-				t.Fatal("config written for a judge that never answered")
 			}
 			if len(f.Runner.Detached) != 0 {
 				t.Fatalf("a listening server was restarted or shadowed: %+v", f.Runner.Detached)
@@ -266,7 +240,7 @@ func TestMissingAdapterIsDownloadedNotTrained(t *testing.T) {
 	}
 }
 
-// The probe is the gate battery itself: the plugin's questions, a harmless bash state.
+// The probe is the gate battery itself: the gate's questions, a harmless bash state.
 func TestProbeSendsTheGateQuestions(t *testing.T) {
 	f := judgetest.New(t)
 	if o := f.Local.Prepare(); !o.Ready {
@@ -347,46 +321,9 @@ func TestFailedDownloadSpawnIsRetriedNextLaunch(t *testing.T) {
 	}
 }
 
-func TestMissingDependenciesAreInstalledOnce(t *testing.T) {
-	f := judgetest.New(t)
-	nm := filepath.Join(f.Plugin, "node_modules")
-	os.RemoveAll(nm)
-	f.Runner.OnRun = func(c judgetest.Call) error {
-		for _, d := range []string{"mvdan-sh", "tldts"} {
-			writeFile(t, filepath.Join(nm, d, "package.json"), "{}")
-		}
-		return nil
-	}
-	if o := f.Local.Prepare(); !o.Ready {
-		t.Fatalf("not ready: %+v", o)
-	}
-	r := f.Runner.Ran
-	if len(r) != 1 || r[0].Name != f.Bun || r[0].Dir != f.Plugin ||
-		!slices.Equal(r[0].Args, []string{"install", "--frozen-lockfile", "--production"}) {
-		t.Fatalf("install %+v", r)
-	}
-	if o := f.Local.Prepare(); !o.Ready || len(f.Runner.Ran) != 1 {
-		t.Fatalf("reinstalled: %+v", f.Runner.Ran)
-	}
-}
-
-func TestFailedInstallKeepsTheClassifierOff(t *testing.T) {
-	f := judgetest.New(t)
-	os.RemoveAll(filepath.Join(f.Plugin, "node_modules"))
-	f.Runner.OnRun = func(judgetest.Call) error { return os.ErrDeadlineExceeded }
-	o := f.Local.Prepare()
-	if o.Ready || !o.Transient || !strings.Contains(o.Reason, "dependencies") {
-		t.Fatalf("outcome %+v", o)
-	}
-	if len(f.Runner.Detached) != 0 {
-		t.Fatal("started a server for a plugin that cannot load")
-	}
-}
-
 func TestDryRunProbesButStartsNothing(t *testing.T) {
 	f := judgetest.New(t)
 	f.Local.DryRun = true
-	os.RemoveAll(filepath.Join(f.Plugin, "node_modules"))
 	os.RemoveAll(f.ModelDir)
 	f.Server.Down()
 	if o := f.Local.Prepare(); o.Ready || !o.Transient {
@@ -396,10 +333,6 @@ func TestDryRunProbesButStartsNothing(t *testing.T) {
 		t.Fatalf("dry run started processes: %+v", f.Runner)
 	}
 	f.Server.Up()
-	os.MkdirAll(filepath.Join(f.Plugin, "node_modules", "mvdan-sh"), 0o755)
-	os.MkdirAll(filepath.Join(f.Plugin, "node_modules", "tldts"), 0o755)
-	writeFile(t, filepath.Join(f.Plugin, "node_modules", "mvdan-sh", "package.json"), "{}")
-	writeFile(t, filepath.Join(f.Plugin, "node_modules", "tldts", "package.json"), "{}")
 	if o := f.Local.Prepare(); !o.Ready {
 		t.Fatalf("dry run with a live judge must show the wiring: %+v", o)
 	}
@@ -426,55 +359,6 @@ func TestLockWaitIsBounded(t *testing.T) {
 	}
 	if f.Runner.Calls() != 0 {
 		t.Fatal("started a server without the lock")
-	}
-}
-
-func TestConfigKeepsUserEditsAndOwnsJudgeBackend(t *testing.T) {
-	f := judgetest.New(t)
-	p := judge.ConfigPath(f.State)
-	writeFile(t, p, `{"enabled": false, "timeoutMs": 3000, "reviewerModel": "a/b", "futureKey": 1,
-  "judgeBackend": {"kind": "typesafe"}}`)
-	if o := f.Local.Prepare(); !o.Ready {
-		t.Fatalf("not ready: %+v", o)
-	}
-	cfg := readConfig(t, f)
-	if cfg["enabled"] != false || cfg["timeoutMs"] != float64(3000) || cfg["reviewerModel"] != "a/b" || cfg["futureKey"] != float64(1) {
-		t.Fatalf("user keys lost: %v", cfg)
-	}
-	if jb, _ := cfg["judgeBackend"].(map[string]any); jb["kind"] != "endpoint" {
-		t.Fatalf("judgeBackend not restored: %v", cfg["judgeBackend"])
-	}
-	if cfg["battery"] != f.Gate || cfg["hardBlocks"] != false {
-		t.Fatalf("owned keys not restored: %v", cfg)
-	}
-	// a user edit of an owned key is undone on the next launch
-	cfg["battery"], cfg["hardBlocks"] = "/elsewhere.json", true
-	b, _ := json.Marshal(cfg)
-	writeFile(t, p, string(b))
-	if o := f.Local.Prepare(); !o.Ready {
-		t.Fatalf("not ready: %+v", o)
-	}
-	if cfg = readConfig(t, f); cfg["battery"] != f.Gate || cfg["hardBlocks"] != false || cfg["timeoutMs"] != float64(3000) {
-		t.Fatalf("owned keys not restored or user key lost: %v", cfg)
-	}
-	before, _ := os.Stat(p)
-	time.Sleep(20 * time.Millisecond)
-	f.Local.Prepare()
-	if after, _ := os.Stat(p); !after.ModTime().Equal(before.ModTime()) {
-		t.Fatal("an up-to-date config was rewritten")
-	}
-}
-
-func TestCorruptConfigIsNeverOverwritten(t *testing.T) {
-	f := judgetest.New(t)
-	p := judge.ConfigPath(f.State)
-	writeFile(t, p, `{"enabled": tru`)
-	o := f.Local.Prepare()
-	if o.Ready || !o.Transient || !strings.Contains(o.Reason, p) {
-		t.Fatalf("outcome %+v", o)
-	}
-	if b, _ := os.ReadFile(p); string(b) != `{"enabled": tru` {
-		t.Fatalf("corrupt user file replaced: %q", b)
 	}
 }
 
@@ -510,6 +394,14 @@ func TestDescribeExplainsOffAndOn(t *testing.T) {
 		if r[0] == "judge model" {
 			model = r[1]
 		}
+	}
+	rows = f.Local.Describe()
+	var names []string
+	for _, r := range rows {
+		names = append(names, r[0])
+	}
+	if want := []string{"classifier", "judge model", "judge adapter", "judge gate", "judge extension", "judge audit log", "judge logs"}; !slices.Equal(names, want) {
+		t.Fatalf("doctor rows %v, want %v", names, want)
 	}
 	if !strings.Contains(model, "MISSING") || f.Runner.Calls() != 0 {
 		t.Fatalf("model row %q, calls %d", model, f.Runner.Calls())
@@ -634,7 +526,7 @@ case "$2" in *fetch.py) d="$JUDGE_FT_WORK/models/JEV-9B-MLX-NVFP4"; mkdir -p "$d
 	}
 }
 
-// The plugin aborts a classification at 8 s and then blocks every bash call, so a judge that is up
+// The gate gives a decision GateBudget and then blocks the call, so a judge that is up
 // but cannot answer a battery-sized request quickly must keep the classifier off.
 func TestSlowLoadedJudgeKeepsTheClassifierOff(t *testing.T) {
 	f := judgetest.New(t)
@@ -644,8 +536,8 @@ func TestSlowLoadedJudgeKeepsTheClassifierOff(t *testing.T) {
 	if o.Ready || !o.Transient || !strings.Contains(o.Reason, "too slow") {
 		t.Fatalf("outcome %+v", o)
 	}
-	if f.Runner.Calls() != 0 || exists(judge.ConfigPath(f.State)) {
-		t.Fatalf("a slow warm judge must not be restarted or wired: calls=%d", f.Runner.Calls())
+	if f.Runner.Calls() != 0 {
+		t.Fatalf("a slow warm judge must not be restarted: calls=%d", f.Runner.Calls())
 	}
 }
 
