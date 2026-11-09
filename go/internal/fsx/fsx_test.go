@@ -20,8 +20,31 @@ func TestWriteCreatesParentsAndReplaces(t *testing.T) {
 	if b, _ := os.ReadFile(p); string(b) != "two" {
 		t.Fatalf("got %q", b)
 	}
-	if _, err := os.Stat(p + ".tmp"); !os.IsNotExist(err) {
-		t.Fatal("tmp file left behind")
+	if ents, _ := os.ReadDir(filepath.Dir(p)); len(ents) != 1 {
+		t.Fatalf("tmp file left behind: %v", ents)
+	}
+	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v", fi.Mode().Perm())
+	}
+}
+
+// Herdr restores every pane at once after a reboot, so many launchers rewrite the same config together.
+func TestWriteConcurrentSamePath(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "settings.json")
+	errs := make(chan error, 64)
+	for i := 0; i < cap(errs); i++ {
+		go func() { errs <- Write(p, []byte(strings.Repeat("x", 1<<16))) }()
+	}
+	for i := 0; i < cap(errs); i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if b, _ := os.ReadFile(p); len(b) != 1<<16 {
+		t.Fatalf("torn write: %d bytes", len(b))
+	}
+	if ents, _ := os.ReadDir(filepath.Dir(p)); len(ents) != 1 {
+		t.Fatalf("tmp files left behind: %v", ents)
 	}
 }
 

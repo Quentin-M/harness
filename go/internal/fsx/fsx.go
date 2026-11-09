@@ -10,20 +10,54 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"syscall"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Write creates parent dirs and replaces path atomically via a sibling .tmp file.
+// Write creates parent dirs and replaces path atomically via a uniquely named sibling temp file,
+// so concurrent launchers writing the same path never rename each other's temp away.
 func Write(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// Lock blocks until it holds an exclusive flock on path; the kernel drops it if the process dies.
+func Lock(path string) (unlock func(), err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return nil, err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
 	}
-	return os.Rename(tmp, path)
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	return func() { f.Close() }, nil
 }
 
 // FreshDir removes whatever is at path (file, symlink or tree) and recreates it as an empty dir.

@@ -348,6 +348,37 @@ func TestSyncGeneratesEveryHarness(t *testing.T) {
 	}
 }
 
+// Herdr restores every pane at once after a reboot: each launcher syncs the same state dir together.
+func TestConcurrentSyncs(t *testing.T) {
+	f := newFixture(t)
+	f.run("sync")
+	errs := make(chan error, 24)
+	for range cap(errs) {
+		go func() {
+			cmd := exec.Command(harnessBin, "sync")
+			cmd.Dir = f.tmp
+			for k, v := range f.env {
+				cmd.Env = append(cmd.Env, k+"="+v)
+			}
+			if out, err := cmd.CombinedOutput(); err != nil {
+				errs <- fmt.Errorf("%v: %s", err, out)
+				return
+			}
+			errs <- nil
+		}()
+	}
+	for range cap(errs) {
+		if err := <-errs; err != nil {
+			t.Error(err)
+		}
+	}
+	readJSON(t, f.p("claude/settings.json"))
+	readYAML(t, f.p("omp/agent/config.yml"))
+	for _, h := range []string{"omp/agent", "claude", "codex"} {
+		eq(t, names(t, f.p(h+"/skills")), []string{"only-base", "tdd", "trace"}, h+" skills")
+	}
+}
+
 func TestInstructionOrderAndPstackSheet(t *testing.T) {
 	f := newFixture(t)
 	f.run("sync")

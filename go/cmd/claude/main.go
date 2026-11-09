@@ -27,6 +27,7 @@ import (
 
 	"github.com/Quentin-M/harness/internal/diagram"
 	"github.com/Quentin-M/harness/internal/dream"
+	"github.com/Quentin-M/harness/internal/fsx"
 	"github.com/Quentin-M/harness/internal/harness"
 	"github.com/Quentin-M/harness/internal/harness/claude"
 	_ "github.com/Quentin-M/harness/internal/harness/codex"
@@ -116,7 +117,7 @@ func run(argv []string) error {
 	case "sync":
 		for _, h := range harness.Synced() {
 			hh, _ := harness.Get(h)
-			if err := hh.Sync(ctx); err != nil {
+			if err := syncLocked(ctx, hh); err != nil {
 				return err
 			}
 		}
@@ -127,6 +128,16 @@ func run(argv []string) error {
 		return nil
 	}
 	return launch(ctx, a)
+}
+
+// Sync rewrites shared state (settings.json read-modify-write, skill links), so launchers take turns.
+func syncLocked(ctx *harness.Ctx, h harness.Harness) error {
+	unlock, err := fsx.Lock(filepath.Join(ctx.State, "sync.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return h.Sync(ctx)
 }
 
 func launch(ctx *harness.Ctx, a args) error {
@@ -145,8 +156,10 @@ func launch(ctx *harness.Ctx, a args) error {
 	if err := h.Env(ctx); err != nil {
 		return err
 	}
-	if err := h.Sync(ctx); err != nil {
-		return err
+	if slices.Contains(harness.Synced(), a.harness) {
+		if err := syncLocked(ctx, h); err != nil {
+			return err
+		}
 	}
 	argv, err := h.Argv(ctx, a.model, a.rest)
 	if err != nil {
