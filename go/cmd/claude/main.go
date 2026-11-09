@@ -1,11 +1,22 @@
 // claude generates harness config into one state dir, then execs claude, omp, codex or opencode.
 //
-//	claude [--claude|--omp|--codex|--opencode|--oc] [--model ROLE_OR_ID] [harness args...]
+//	claude [--claude|--omp|--codex|--opencode|--oc] [--model ROLE_OR_ID] [--yolo] [harness args...]
 //	claude sync | claude doctor
 //	claude diagrams <file.md>...   (lint box-drawing diagrams; exit 1 on any issue)
 //	claude memory path [dir]       (the project's shared memory dir) | memory context (SessionStart hook)
 //	claude dream [--project DIR] [--since DURATION] [--dry-run]   (distil recent sessions into memory)
 //	claude dream guard <dir>       (the dream's PreToolUse hook: exit 2 on a tool call outside dir)
+//	claude judge fetch             (download the judge's base model and published adapter, in the foreground)
+//	claude judge train [--force]   (rebuild the v3 adapter locally, about 75 min on the GPU; refuses to replace one without --force)
+//	claude judge bench run --endpoint URL --model ID --battery FILE [--corpus PATH]...   (score a judge on bench/judge)
+//	claude judge bench compare <report.json>...   (side-by-side markdown of bench reports)
+//
+// --yolo launches without the classifier and without approval prompts: with --omp it adds omp's
+// --approval-mode=yolo and never probes or starts the local judge; claude already runs with
+// --dangerously-skip-permissions, so there it changes nothing; codex and opencode reject it.
+// Use it when the classifier misbehaves (blocks routine commands, hangs a session). Narrower
+// escapes: HARNESS_JUDGE=off launches omp without the classifier but keeps omp's approval
+// prompts, and `/classifier off` inside a session switches it off for that session.
 //
 // Every launch but opencode starts a detached `dream` once the last one is over 20h old.
 // Default harness: $HARNESS_DEFAULT, else claude. opencode runs vanilla, no generated config.
@@ -13,12 +24,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -33,6 +46,8 @@ import (
 	_ "github.com/Quentin-M/harness/internal/harness/codex"
 	_ "github.com/Quentin-M/harness/internal/harness/omp"
 	_ "github.com/Quentin-M/harness/internal/harness/opencode"
+	"github.com/Quentin-M/harness/internal/judge"
+	"github.com/Quentin-M/harness/internal/judge/bench"
 	"github.com/Quentin-M/harness/internal/layer"
 	"github.com/Quentin-M/harness/internal/memory"
 	"github.com/Quentin-M/harness/internal/model"
@@ -41,7 +56,8 @@ import (
 
 // dryRunKeys are the launch env vars a dry run reports, in order.
 var dryRunKeys = []string{"HOME", "PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_FORCE_IMAGE_PROTOCOL", "CLAUDE_CONFIG_DIR",
-	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL", model.KeyEnvTag}
+	"CODEX_HOME", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "LITELLM_URL", model.KeyEnvTag,
+	judge.ConfigEnv, judge.KeyEnv}
 
 var harnessFlags = map[string]string{"--claude": "claude", "--omp": "omp", "--codex": "codex",
 	"--opencode": "opencode", "--oc": "opencode"}
@@ -59,8 +75,9 @@ func main() {
 
 type args struct {
 	harness, model string
+	yolo           bool
 	rest           []string
-	cmd            string // sync, doctor, diagrams, memory, dream or "" for a launch
+	cmd            string // sync, doctor, diagrams, memory, dream, judge or "" for a launch
 }
 
 func parse(argv []string, env sys.Env) args {
@@ -73,6 +90,8 @@ func parse(argv []string, env sys.Env) args {
 		arg := argv[i]
 		if h, ok := harnessFlags[arg]; ok {
 			a.harness = h
+		} else if arg == "--yolo" {
+			a.yolo = true
 		} else if arg == "--model" && i+1 < len(argv) {
 			i++
 			a.model = argv[i]
@@ -85,7 +104,7 @@ func parse(argv []string, env sys.Env) args {
 		}
 	}
 	a.rest = argv[i:]
-	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "diagrams", "memory", "dream"}, a.rest[0]) {
+	if len(a.rest) > 0 && !dashdash && slices.Contains([]string{"sync", "doctor", "diagrams", "memory", "dream", "judge"}, a.rest[0]) {
 		a.cmd = a.rest[0]
 	}
 	return a
@@ -101,6 +120,8 @@ func run(argv []string) error {
 		return memoryCmd(env, a.rest[1:])
 	case "dream":
 		return dreamCmd(env, a.rest[1:])
+	case "judge":
+		return judgeCmd(env, a.rest[1:])
 	}
 	root, err := harnessRoot(env)
 	if err != nil {
@@ -110,6 +131,10 @@ func run(argv []string) error {
 		DryRun: env.Get("HARNESS_DRY_RUN") == "1"}
 	ctx.Cwd, _ = os.Getwd()
 	ctx.Layers = layer.Discover(root, env)
+	ctx.Yolo = a.yolo
+	if (a.harness == "omp" || a.cmd == "doctor") && !a.yolo {
+		ctx.Judge = judge.New(ctx.Sys, ctx.Root, ctx.State, ctx.DryRun, os.Stderr)
+	}
 	if ctx.Models, err = model.Load(env); err != nil {
 		return err
 	}
@@ -145,6 +170,9 @@ func launch(ctx *harness.Ctx, a args) error {
 	if !ok {
 		return fmt.Errorf("unknown harness %q", a.harness)
 	}
+	if a.yolo && (a.harness == "codex" || a.harness == "opencode") {
+		return fmt.Errorf("--yolo is not supported for %s: it has no no-prompt flag here (only omp and claude do)", a.harness)
+	}
 	// KeyEnv already prefers the shell's pair; an inherited half pair must not reach the helper.
 	for _, k := range model.KeyEnvVars {
 		if v, ok := ctx.Models.KeyEnv[k]; ok {
@@ -175,6 +203,37 @@ func launch(ctx *harness.Ctx, a args) error {
 		}
 	}
 	return syscall.Exec(argv[0], argv, ctx.Env.Environ())
+}
+
+// judgeCmd runs `judge fetch`, which a launch spawns detached when the judge model is missing,
+// and `judge bench`, which scores a decision model against the labeled corpus in bench/judge.
+func judgeCmd(env sys.Env, argv []string) error {
+	if len(argv) >= 1 && (argv[0] == "fetch" || argv[0] == "train") {
+		force := len(argv) == 2 && argv[0] == "train" && argv[1] == "--force"
+		if len(argv) != 1 && !force {
+			return fmt.Errorf("usage: judge fetch | judge train [--force]")
+		}
+		root, err := harnessRoot(env)
+		if err != nil {
+			return err
+		}
+		if argv[0] == "fetch" {
+			return judge.Fetch(sys.New(env), root, stateDir(env), os.Stdout)
+		}
+		return judge.Train(sys.New(env), root, stateDir(env), force, os.Stdout)
+	}
+	if len(argv) >= 1 && argv[0] == "bench" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		cwd, _ := os.Getwd()
+		root := ""
+		if r := env.Get("HARNESS_ROOT"); r != "" {
+			root = resolve(expand(r, env))
+		}
+		return bench.Main(ctx, argv[1:], bench.Env{State: stateDir(env), Root: root, Cwd: cwd,
+			Key: env.Get(judge.KeyEnv), Now: time.Now, Stdout: os.Stdout, Stderr: os.Stderr})
+	}
+	return errors.New("usage: judge fetch | judge train [--force] | judge bench run|compare ...")
 }
 
 // diagrams lints every diagram in the named markdown files and fails when any has an issue.
@@ -403,6 +462,11 @@ func doctor(ctx *harness.Ctx) {
 		[2]string{"bin herdr", or(s.Which("herdr"), "-")},
 		[2]string{"role default", m.Resolve("omp", "default")},
 		[2]string{"role review", m.Resolve("omp", "review")})
+	if ctx.Yolo {
+		rows = append(rows, [2]string{"classifier", "off: --yolo"})
+	} else if ctx.Judge != nil {
+		rows = append(rows, ctx.Judge.Describe()...)
+	}
 	for _, r := range rows {
 		fmt.Printf("%-14s %s\n", r[0], r[1])
 	}

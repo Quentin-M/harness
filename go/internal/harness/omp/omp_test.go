@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Quentin-M/harness/internal/harness"
+	"github.com/Quentin-M/harness/internal/judge"
+	"github.com/Quentin-M/harness/internal/judge/judgetest"
 	"github.com/Quentin-M/harness/internal/layer"
 	"github.com/Quentin-M/harness/internal/model"
 	"github.com/Quentin-M/harness/internal/sys"
@@ -442,5 +444,79 @@ func TestArgv(t *testing.T) {
 	got, _ = (H{}).Argv(ctx, "", nil)
 	if !slices.Equal(got, []string{bin}) {
 		t.Errorf("argv = %v", got)
+	}
+}
+
+func TestArgvLoadsTheClassifierForAProvenJudge(t *testing.T) {
+	ctx := fixture(t, gateway())
+	j := judgetest.New(t)
+	ctx.Judge = j.Local
+	got, err := (H{}).Argv(ctx, "review", []string{"hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(ctx.Cwd, "bin", "omp")
+	if want := []string{bin, "--model", "gw/rev", "-e", j.Plugin, "hello"}; !slices.Equal(got, want) {
+		t.Fatalf("argv = %v, want %v", got, want)
+	}
+	if ctx.Env[judge.ConfigEnv] != judge.ConfigPath(j.State) || ctx.Env[judge.KeyEnv] == "" {
+		t.Fatalf("env = %v", ctx.Env)
+	}
+}
+
+// --yolo is no classifier: the judge is never consulted, even a proven one, and omp skips approvals.
+func TestArgvYoloSkipsTheClassifier(t *testing.T) {
+	ctx := fixture(t, gateway())
+	j := judgetest.New(t)
+	ctx.Judge, ctx.Yolo = j.Local, true
+	got, err := (H{}).Argv(ctx, "review", []string{"hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(ctx.Cwd, "bin", "omp")
+	if want := []string{bin, "--model", "gw/rev", "--approval-mode=yolo", "hello"}; !slices.Equal(got, want) {
+		t.Fatalf("argv = %v, want %v", got, want)
+	}
+	if j.Server.Hits.Load() != 0 || j.Runner.Calls() != 0 {
+		t.Fatalf("yolo probed or started the judge: hits %d calls %d", j.Server.Hits.Load(), j.Runner.Calls())
+	}
+	if _, ok := ctx.Env[judge.ConfigEnv]; ok {
+		t.Fatal("classifier env set under --yolo")
+	}
+}
+
+// An unproven judge, or none at all, must leave omp exactly as it was: the plugin fails closed.
+func TestArgvWithoutAProvenJudgeIsVanilla(t *testing.T) {
+	cases := map[string]func(ctx *harness.Ctx, j *judgetest.Fixture){
+		"linux":      func(_ *harness.Ctx, j *judgetest.Fixture) { j.Local.Host.OS = "linux" },
+		"small mac":  func(_ *harness.Ctx, j *judgetest.Fixture) { j.Local.Host.Memory = 8 << 30 },
+		"opted out":  func(_ *harness.Ctx, j *judgetest.Fixture) { j.Local.Off = true },
+		"judge dead": func(_ *harness.Ctx, j *judgetest.Fixture) { j.Server.SetLoaded(false); j.Local.DryRun = true },
+		"no judge":   func(ctx *harness.Ctx, _ *judgetest.Fixture) { ctx.Judge = nil },
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx := fixture(t, gateway())
+			j := judgetest.New(t)
+			ctx.Judge = j.Local
+			setup(ctx, j)
+			ctx.Env[judge.ConfigEnv], ctx.Env[judge.KeyEnv] = "/stale/omp-classifier.json", "stale" // a shell's own
+			if err := (H{}).Env(ctx); err != nil {
+				t.Fatal(err)
+			}
+			got, err := (H{}).Argv(ctx, "review", []string{"hello"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			bin := filepath.Join(ctx.Cwd, "bin", "omp")
+			if want := []string{bin, "--model", "gw/rev", "hello"}; !slices.Equal(got, want) {
+				t.Fatalf("argv = %v, want vanilla %v", got, want)
+			}
+			for _, k := range []string{judge.ConfigEnv, judge.KeyEnv} {
+				if _, ok := ctx.Env[k]; ok {
+					t.Fatalf("%s leaked into a classifier-free launch", k)
+				}
+			}
+		})
 	}
 }

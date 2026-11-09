@@ -110,7 +110,7 @@ func (s *Sys) pointsAtHarness(path string) bool {
 // FindBin finds the real `name` binary: HARNESS_<NAME>_BIN, then PATH and the usual install dirs,
 // skipping anything that points back at harness. "" when absent.
 func (s *Sys) FindBin(name string) string {
-	if o := s.Env.Get("HARNESS_" + strings.ToUpper(name) + "_BIN"); o != "" {
+	if o := s.Env.Get("HARNESS_" + strings.ReplaceAll(strings.ToUpper(name), "-", "_") + "_BIN"); o != "" {
 		return o
 	}
 	var dirs []string

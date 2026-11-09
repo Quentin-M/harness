@@ -54,6 +54,10 @@ func TestFindBinOverrideHomeDirsAndSelf(t *testing.T) {
 	if got := s.FindBin("zzbin"); got != "/no/such" {
 		t.Fatal(got)
 	}
+	s.Env["HARNESS_ZZ_BIN_BIN"] = "/hyphen/override"
+	if got := s.FindBin("zz-bin"); got != "/hyphen/override" {
+		t.Fatalf("hyphenated name needs an underscore override var: %s", got)
+	}
 	delete(s.Env, "HARNESS_ZZBIN_BIN")
 	self := exe(t, filepath.Join(d, "harness-real"), "\x7fELF")
 	os.MkdirAll(filepath.Join(d, "p"), 0o755)

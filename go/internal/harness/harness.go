@@ -4,6 +4,7 @@ package harness
 import (
 	"sort"
 
+	"github.com/Quentin-M/harness/internal/judge"
 	"github.com/Quentin-M/harness/internal/layer"
 	"github.com/Quentin-M/harness/internal/model"
 	"github.com/Quentin-M/harness/internal/sys"
@@ -19,6 +20,8 @@ type Ctx struct {
 	Env    sys.Env       // launch env; harnesses mutate it in Env()
 	Sys    *sys.Sys      // binaries and commands
 	DryRun bool
+	Judge  *judge.Local // local classifier judge; nil means launch without a classifier
+	Yolo   bool         // --yolo: no classifier and no approval prompts, for harnesses that have a switch
 }
 
 // Harness renders its config into the state dir and describes how to exec it.
