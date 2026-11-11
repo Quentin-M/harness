@@ -6,6 +6,20 @@
 - **Test first.** Write the test that defines success, implement until it passes, show both. No task is done without that proof.
 - **Correct first.** Write the obviously-correct version and verify it. Optimize only inside the budget the design set, preserving behavior.
 
+## Review feedback
+
+Automated feedback (bots, sampled reviewers, bugbot) is a proposal, never a spec. Triage each finding into one of three:
+
+| Class | Test | Action |
+|---|---|---|
+| fix | a defect inside the agreed design and scope | fix it, reply, resolve |
+| dismiss | wrong, noise, or already covered | reply with the disproof, resolve |
+| ask Q | changes the agreed design, or adds scope: new API, new abstraction, new files, other modules, extra cases | no code change yet |
+
+- Coalesce every "ask Q" finding from the round into one batch of questions (one or several, grouped by topic): a table of finding, what it changes, size of the diff, your recommendation. Line 1 is the decision Q must make. Threads stay open until Q answers.
+- Push back yourself when the finding is clearly out of scope or wrong; no need to ask. Unsure which class: ask.
+- Scope is the brief. A fix that grows the diff well past the finding's own lines is a design change.
+
 ## Task loop
 
 1. **Goal.** Restate the success state: "The goal is [state]. I'll show you when it holds. Correct?"
