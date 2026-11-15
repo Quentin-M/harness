@@ -128,7 +128,7 @@ func TestBadManagedSettings(t *testing.T) {
 func TestEmbeddedCatalog(t *testing.T) {
 	c := load(t, sys.Env{"HARNESS_MANAGED_SETTINGS": t.TempDir(), "ANTHROPIC_BASE_URL": "https://gw.example"})
 	want := map[string]string{"default": "claude-opus-5-5", "review": "gpt-6.1-sol", "fast": "claude-sonnet-5-5",
-		"vision": "gpt-5.6-terra", "tiny": "gpt-5.6-luna"}
+		"vision": "gpt-6.1-terra", "tiny": "gpt-6-luna"}
 	for role, id := range want {
 		if got := c.RoleModel("claude", role); got != id {
 			t.Errorf("%s = %s, want %s", role, got, id)
