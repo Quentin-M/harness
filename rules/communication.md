@@ -37,7 +37,7 @@ floor that covers all text.
 | A change | Before │ after, side by side |
 | Files, modules, hierarchy | Tree with `+ ~ -` marks |
 | Events over time | Timeline |
-| Options, comparisons | Markdown table |
+| Options, comparisons | Boxed table in a code fence |
 | Quantities, ratios | Horizontal bars, numbers right-aligned |
 | Where a failure sits | Flow with `✗` on the broken hop, callout below |
 
@@ -56,6 +56,7 @@ alignment fix that; decoration does not.
 | Notes out of the drawing | Mark the spot with `¹ ² ³`, explain below the fence. Or keep short notes in a column 3+ spaces right of the boxes. |
 | Split | One idea per diagram, ≤ 7 nodes. Two small diagrams with their own captions beat one dense one: "write path first, then read path". |
 | Weight means something | `━ ┃` main path, `─ │` normal, `┄ ┆` async or optional, `✗` broken. One arrowhead family per diagram. |
+| Tables | Draw them with box characters in a code fence: `┌ ┬ ┐ ├ ┼ ┤ └ ┴ ┘ │ ─`. Pad every cell to its column's widest cell plus one space each side, so each `│` stays in one column. A cell that wraps gets its own row-band; keep cells short. Never bare space-aligned columns, never a Markdown pipe table in chat: the eye cannot tell where one column ends and the next begins. |
 | Width-safe glyphs | Box drawing, blocks and the kits below. Emoji and tabs take unknown width and shear every column after them. |
 | Read it back | Before sending, scan each column top to bottom and each row left to right. A label that could belong to two things moves. In files, `harness diagrams <file.md>` lints every diagram; `<!-- diagram-lint: off -->` skips the next one. |
 
@@ -177,6 +178,16 @@ Quantities, numbers right-aligned in their own column:
     p99 latency
     before   ████████████████████████████   140 ms
     after    ██▌                             12 ms
+
+A table, every border and separator in a fixed column:
+
+    ┌─────────────┬──────────────────┬──────────────────┐
+    │ topology    │ id allocated by  │ account made by  │
+    ├─────────────┼──────────────────┼──────────────────┤
+    │ retail      │ idp              │ api              │
+    │ pure broker │ broker or engine │ broker           │
+    │ cfx         │ engine           │ operator         │
+    └─────────────┴──────────────────┴──────────────────┘
 
 Work in flight:
 
