@@ -33,7 +33,8 @@ func gateway() *model.Config {
 	return &model.Config{BaseURL: "https://gw.example", KeyCmd: "gw-key", Raw: map[string]any{
 		"provider": "gw", "api": "openai", "disable_strict_tools": true,
 		"models": map[string]any{"big": map[string]any{"api": "anthropic", "context": 1000000,
-			"cost": map[string]any{"input": 4, "cacheWrite": 5}, "prompt_cache": map[string]any{"short": 300}},
+			"cost": map[string]any{"input": 4, "cacheWrite": 5}, "prompt_cache": map[string]any{"short": 300},
+			"compat": map[string]any{"supportsLongCacheRetention": true}},
 			"rev": map[string]any{"context": 500000}, "small": nil},
 		"roles": map[string]any{"default": "big", "review": "rev", "fast": "small", "vision": "rev", "tiny": "small",
 			"extra": "rev"},
@@ -130,7 +131,8 @@ func TestSyncGateway(t *testing.T) {
 		mm := m.(map[string]any)
 		ids = append(ids, mm["id"].(string))
 		if mm["id"] == "big" && (mm["api"] != "anthropic-messages" || mm["contextWindow"] != 1000000 ||
-			mm["cost"].(map[string]any)["cacheWrite"] != 5 || mm["promptCache"].(map[string]any)["short"] != 300) {
+			mm["cost"].(map[string]any)["cacheWrite"] != 5 || mm["promptCache"].(map[string]any)["short"] != 300 ||
+			mm["compat"].(map[string]any)["supportsLongCacheRetention"] != true) {
 			t.Errorf("big = %v", mm)
 		}
 	}

@@ -35,7 +35,7 @@ var Roles = [][2]string{
 var API = map[string]string{"anthropic": "anthropic-messages", "openai": "openai-responses"}
 
 var modelKeys = map[string]string{"name": "name", "context": "contextWindow", "max_tokens": "maxTokens",
-	"reasoning": "reasoning", "input": "input", "cost": "cost", "prompt_cache": "promptCache"}
+	"reasoning": "reasoning", "input": "input", "cost": "cost", "prompt_cache": "promptCache", "compat": "compat"}
 
 func (H) Name() string { return "omp" }
 
